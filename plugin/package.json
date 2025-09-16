@@ -1,0 +1,17 @@
+{
+  "name": "nodeplugin",
+  "version": "1.0.0",
+  "author": "whxtelxs",
+  "main": "index.js",
+  "description": "Yandex Music Controller for Ajazz AKP 153",
+  "scripts": {
+    "build": "ncc build index.js -m -o ./build && node autofile.js"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "chrome-remote-interface": "^0.33.0",
+    "fs-extra": "^11.3.0",
+    "log4js": "^6.9.1",
+    "ws": "^8.14.2"
+  }
+}

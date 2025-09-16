@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>Yandex Music Ajazz Plugin - Property Inspector</title>
+    <link href="../utils/bootstrap-icons.css" rel="stylesheet">
+    <link href="../utils/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="sdpi-wrapper p-3">
+        <!-- Яндекс Музыка секция -->
+        <div class="card mb-3 bg-dark">
+            <div class="card-header">
+                <h5 class="card-title">Яндекс Музыка</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <p>Статус соединения: <span id="connectionStatus" class="badge bg-secondary">Неизвестно</span></p>
+                </div>
+                <div class="mb-3">
+                    <button id="checkConnectionBtn" class="btn btn-primary w-100">Проверить соединение</button>
+                </div>
+                <div class="mb-3">
+                    <p class="text-muted small">Убедитесь, что Яндекс Музыка запущена с параметром --remote-debugging-port=9222</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="../utils/common.js"></script>
+    <script src="../utils/action.js"></script>
+    <script src="../utils/axios.js"></script>
+    <script src="index.js"></script>
+</body>
+
+<style>
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        padding: 8px;
+        background-color: #2a2a2a;
+        color: #fff;
+    }
+
+    ::-webkit-scrollbar {
+        display: none;
+    }
+    
+    .card {
+        border: 1px solid #444;
+    }
+    
+    .card-header {
+        background-color: #333;
+        border-bottom: 1px solid #444;
+    }
+    
+    .btn-outline-light:hover {
+        background-color: #444;
+    }
+    
+    .sdpi-wrapper {
+        display: block !important;
+    }
+</style>
+
+</html>

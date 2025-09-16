@@ -1,0 +1,148 @@
+{
+  "Actions": [
+    {
+      "Icon": "static/ym-play.jpg",
+      "Name": "Плей/пауза",
+      "DisableAutomaticStates": false,
+      "States": [
+        {
+          "Image": "static/ym-play.jpg",
+          "Name": "Play"
+        },
+        {
+          "Image": "static/ym-pause.jpg",
+          "Name": "Pause"
+        }
+      ],
+      "Controllers": [],
+      "UserTitleEnabled": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Включить/выключить воспроизведение",
+      "UUID": "com.whxtelxs.streamdock.yandexmusicajazz.ym-play-pause",
+      "PropertyInspectorPath": "propertyInspector/yandexmusicajazz/index.html"
+    },
+    {
+      "Icon": "static/ym-back.jpg",
+      "Name": "Предыдущий трек",
+      "DisableAutomaticStates": true,
+      "States": [
+        {
+          "Image": "static/ym-back.jpg",
+          "TitleAlignment": "center",
+          "FontSize": "8"
+        }
+      ],
+      "Controllers": [],
+      "UserTitleEnabled": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Предыдущий трек",
+      "UUID": "com.whxtelxs.streamdock.yandexmusicajazz.ym-previous",
+      "PropertyInspectorPath": "propertyInspector/yandexmusicajazz/index.html"
+    },
+    {
+      "Icon": "static/ym-next.jpg",
+      "Name": "Следующий трек",
+      "DisableAutomaticStates": true,
+      "States": [
+        {
+          "Image": "static/ym-next.jpg",
+          "TitleAlignment": "center",
+          "FontSize": "8"
+        }
+      ],
+      "Controllers": [],
+      "UserTitleEnabled": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Следующий трек",
+      "UUID": "com.whxtelxs.streamdock.yandexmusicajazz.ym-next",
+      "PropertyInspectorPath": "propertyInspector/yandexmusicajazz/index.html"
+    },
+    {
+      "Icon": "static/ym-no-like.jpg",
+      "Name": "Лайк",
+      "DisableAutomaticStates": false,
+      "States": [
+        {
+          "Image": "static/ym-no-like.jpg",
+          "Name": "Not Liked"
+        },
+        {
+          "Image": "static/ym-like.jpg",
+          "Name": "Liked"
+        }
+      ],
+      "Controllers": [],
+      "UserTitleEnabled": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Поставить лайк песне",
+      "UUID": "com.whxtelxs.streamdock.yandexmusicajazz.ym-like",
+      "PropertyInspectorPath": "propertyInspector/yandexmusicajazz/index.html"
+    },
+    {
+      "Icon": "static/ym-dislike.jpg",
+      "Name": "Дизлайк",
+      "DisableAutomaticStates": true,
+      "States": [
+        {
+          "Image": "static/ym-dislike.jpg",
+          "TitleAlignment": "center",
+          "FontSize": "8"
+        }
+      ],
+      "Controllers": [],
+      "UserTitleEnabled": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Поставить дизлайк песне",
+      "UUID": "com.whxtelxs.streamdock.yandexmusicajazz.ym-dislike",
+      "PropertyInspectorPath": "propertyInspector/yandexmusicajazz/index.html"
+    },
+    {
+      "Icon": "static/ym-music-on.jpg",
+      "Name": "Выключить звук",
+      "DisableAutomaticStates": false,
+      "States": [
+        {
+          "Image": "static/ym-music-on.jpg",
+          "Name": "Sound On"
+        },
+        {
+          "Image": "static/ym-music-off.jpg",
+          "Name": "Sound Off"
+        }
+      ],
+      "Controllers": [],
+      "UserTitleEnabled": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Выключить звук",
+      "UUID": "com.whxtelxs.streamdock.yandexmusicajazz.ym-mute",
+      "PropertyInspectorPath": "propertyInspector/yandexmusicajazz/index.html"
+    }
+  ],
+  "SDKVersion": 1,
+  "Author": "whxtelxs",
+  "Name": "Yandex Music Ajazz Plugin",
+  "Icon": "static/App-logo.png",
+  "CodePathWin": "plugin/index.js",
+  "CodePathMac": "plugin/index.js",
+  "Description": "Плагин для управления Yandex Music через Ajazz.",
+  "Category": "Yandex Music",
+  "CategoryIcon": "static/App-logo.png",
+  "Version": "1.0.0",
+  "URL": "https://mirabox.key123.vip/home",
+  "OS": [
+    {
+      "Platform": "mac",
+      "MinimumVersion": "10.11"
+    },
+    {
+      "Platform": "windows",
+      "MinimumVersion": "7"
+    }
+  ],
+  "Software": {
+    "MinimumVersion": "3.10.188.226"
+  },
+  "Nodejs": {
+    "Version": "20"
+  }
+}
