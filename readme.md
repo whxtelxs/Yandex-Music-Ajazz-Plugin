@@ -9,10 +9,27 @@
 - Переключение на следующий/предыдущий трек
 - Лайк/дизлайк текущего трека
 - Включение/выключение звука
+- Отображение состояние текущего трека (лайкнут или нет)
+- Отображения состояния кнопок (пауза, мут)
+
+## Протестированно
+
+Клавиатуры:
+- Ajazz AKP153
+- Mirabox n4
+
+Системы:
+- Windows 11 24H2
+- MacOS 15
+
+Приложения:
+- Yandex Music 5.68.0
+- Yandex Music Mod 1.34.0
 
 # Как запустить
 
-## Windows
+<details>
+<summary>Windows</summary>
 
 1. Скачайте релиз и распакуйте папку по пути 
   ```
@@ -29,8 +46,10 @@ C:\Users\USERNAME\AppData\Roaming\HotSpot\StreamDock\plugins
 3. Запустите ярлык, откройте Ajazz и настройте кнопки
 
 ![Yandex Music Ajazz](static/git-settings.jpg)
+</details>
 
-## MacOS
+<details>
+<summary>MacOS</summary>
 
 1. Скачайте релиз и распакуйте папку по пути 
   ```
@@ -48,6 +67,7 @@ open -a /Applications/Яндекс\ Музыка.app --args --remote-debugging-p
 3. Откройте Ajazz и настройте кнопки
 
 ![Yandex Music Ajazz](static/git-settings.jpg)
+</details>
 
 Проверьте статус соединения, нажав на любую кнопку, а затем на Проверить соединение
 
