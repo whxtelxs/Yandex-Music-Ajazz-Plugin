@@ -116,6 +116,61 @@
       "Tooltip": "Выключить звук",
       "UUID": "com.whxtelxs.streamdock.yandexmusicajazz.ym-mute",
       "PropertyInspectorPath": "propertyInspector/yandexmusicajazz/index.html"
+    },
+    {
+      "Icon": "static/App-logo.png",
+      "Name": "Обложка трека",
+      "DisableAutomaticStates": true,
+      "States": [
+        {
+          "Image": "static/App-logo.png",
+          "TitleAlignment": "center",
+          "FontSize": "8"
+        }
+      ],
+      "Controllers": [],
+      "UserTitleEnabled": true,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Показывает обложку играющего трека",
+      "UUID": "com.whxtelxs.streamdock.yandexmusicajazz.ym-cover",
+      "PropertyInspectorPath": "propertyInspector/yandexmusicajazz/index.html"
+    },
+
+    {
+      "Icon": "static/App-logo.png",
+      "Name": "Время трека: текущее/общее",
+      "DisableAutomaticStates": true,
+      "States": [
+        {
+          "Image": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNzIiIGhlaWdodD0iNzIiIHZpZXdCb3g9IjAgMCA3MiA3MiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjcyIiBoZWlnaHQ9IjcyIiBmaWxsPSIjMDAwMDAwIi8+Cjwvc3ZnPgo=",
+          "TitleAlignment": "center",
+          "FontSize": "12"
+        }
+      ],
+      "Controllers": [],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Показывает текущее время и общую длительность трека",
+      "UUID": "com.whxtelxs.streamdock.yandexmusicajazz.ym-time-total",
+      "PropertyInspectorPath": "propertyInspector/yandexmusicajazz/index.html"
+    },
+    {
+      "Icon": "static/App-logo.png",
+      "Name": "Название трека",
+      "DisableAutomaticStates": true,
+      "States": [
+        {
+          "Image": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNzIiIGhlaWdodD0iNzIiIHZpZXdCb3g9IjAgMCA3MiA3MiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjcyIiBoZWlnaHQ9IjcyIiBmaWxsPSIjMDAwMDAwIi8+Cjwvc3ZnPgo=",
+          "TitleAlignment": "center",
+          "FontSize": "10"
+        }
+      ],
+      "Controllers": [],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Показывает автора и название трека бегущей строкой",
+      "UUID": "com.whxtelxs.streamdock.yandexmusicajazz.ym-track-info",
+      "PropertyInspectorPath": "propertyInspector/yandexmusicajazz/index.html"
     }
   ],
   "SDKVersion": 1,
@@ -127,8 +182,8 @@
   "Description": "Плагин для управления Yandex Music через Ajazz.",
   "Category": "Yandex Music",
   "CategoryIcon": "static/App-logo.png",
-  "Version": "1.0.0",
-  "URL": "https://mirabox.key123.vip/home",
+  "Version": "1.1.0",
+  "URL": "https://whxtelxs.dev",
   "OS": [
     {
       "Platform": "mac",

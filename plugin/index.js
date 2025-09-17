@@ -7,12 +7,28 @@ const plugin = new Plugins('demo');
 const buttonContexts = {
     playPause: [],
     like: [],
-    mute: []
+    mute: [],
+    cover: [],
+    timeTotal: [],
+    trackInfo: []
+};
+
+let lastTrackInfo = null;
+let lastTimeInfo = null;
+let scrollingText = {
+    text: '',
+    position: 0,
+    maxLength: 12,
+    speed: 0.5,
+    frameCounter: 0
 };
 
 let playbackCheckInterval = null;
 let likeCheckInterval = null;
 let muteCheckInterval = null;
+let coverCheckInterval = null;
+let timeCheckInterval = null;
+let trackInfoCheckInterval = null;
 
 plugin.didReceiveGlobalSettings = ({ payload: { settings } }) => {
     log.info('didReceiveGlobalSettings', settings);
@@ -25,6 +41,78 @@ const createSvg = (text) => `<svg width="144" height="144" xmlns="http://www.w3.
     </text>
 </svg>`;
 const timers = {};
+
+// Вырезанная функция в prod
+function sendLogToPropertyInspector(message, type = 'info') {
+    return;
+}
+
+async function downloadAndSetImageAsDataUrl(imageUrl) {
+    try {
+        sendLogToPropertyInspector(`Скачивание изображения с URL: ${imageUrl}`, 'info');
+        
+        const https = require('https');
+        const http = require('http');
+        
+        return new Promise((resolve, reject) => {
+            const client = imageUrl.startsWith('https:') ? https : http;
+            
+            client.get(imageUrl, (response) => {
+                if (response.statusCode !== 200) {
+                    sendLogToPropertyInspector(`HTTP ошибка при скачивании: ${response.statusCode}`, 'error');
+                    reject(new Error(`HTTP ${response.statusCode}`));
+                    return;
+                }
+                
+                const chunks = [];
+                let totalLength = 0;
+                
+                response.on('data', (chunk) => {
+                    chunks.push(chunk);
+                    totalLength += chunk.length;
+                });
+                
+                response.on('end', () => {
+                    try {
+                        const buffer = Buffer.concat(chunks, totalLength);
+                        sendLogToPropertyInspector(`Изображение скачано, размер: ${buffer.length} байт`, 'info');
+                        
+                        const contentType = response.headers['content-type'] || 'image/jpeg';
+                        const base64Data = buffer.toString('base64');
+                        const dataUrl = `data:${contentType};base64,${base64Data}`;
+                        
+                        sendLogToPropertyInspector(`Создан data URL, длина: ${dataUrl.length} символов`, 'info');
+                        
+                        buttonContexts.cover.forEach((context, index) => {
+                            sendLogToPropertyInspector(`Установка data URL для кнопки ${index + 1}`, 'info');
+                            plugin.setImage(context, dataUrl);
+                        });
+                        
+                        sendLogToPropertyInspector('✅ Изображение установлено через data URL', 'info');
+                        resolve(dataUrl);
+                        
+                    } catch (error) {
+                        sendLogToPropertyInspector(`Ошибка при обработке изображения: ${error.message}`, 'error');
+                        reject(error);
+                    }
+                });
+                
+                response.on('error', (error) => {
+                    sendLogToPropertyInspector(`Ошибка при скачивании: ${error.message}`, 'error');
+                    reject(error);
+                });
+                
+            }).on('error', (error) => {
+                sendLogToPropertyInspector(`Ошибка HTTP запроса: ${error.message}`, 'error');
+                reject(error);
+            });
+        });
+        
+    } catch (error) {
+        sendLogToPropertyInspector(`Ошибка в downloadAndSetImageAsDataUrl: ${error.message}`, 'error');
+        log.error('Ошибка в downloadAndSetImageAsDataUrl:', error);
+    }
+}
 
 async function checkYandexMusicConnection() {
     const isConnected = await yandexMusic.checkConnection();
@@ -260,14 +348,282 @@ async function checkMuteState() {
     }
 }
 
+async function restoreCoverForContext(context) {
+    try {
+        if (!lastTrackInfo || !lastTrackInfo.coverUrl) {
+            sendLogToPropertyInspector('Нет кэшированной обложки для восстановления, проверяем текущий трек...', 'info');
+            await checkCoverState();
+            return;
+        }
+        
+        sendLogToPropertyInspector(`Восстановление обложки для контекста ${context}`, 'info');
+        sendLogToPropertyInspector(`Кэшированный трек: ${lastTrackInfo.title} - ${lastTrackInfo.artist}`, 'info');
+        
+        try {
+            await downloadAndSetImageForContext(lastTrackInfo.coverUrl, context);
+            sendLogToPropertyInspector(`✅ Обложка восстановлена для контекста ${context}`, 'info');
+        } catch (error) {
+            sendLogToPropertyInspector(`Ошибка восстановления обложки: ${error.message}`, 'error');
+            sendLogToPropertyInspector('Попробуем получить актуальную информацию о треке...', 'info');
+            await checkCoverState();
+        }
+    } catch (error) {
+        sendLogToPropertyInspector(`Ошибка в restoreCoverForContext: ${error.message}`, 'error');
+        log.error('Ошибка в restoreCoverForContext:', error);
+    }
+}
+
+async function downloadAndSetImageForContext(imageUrl, context) {
+    try {
+        sendLogToPropertyInspector(`Скачивание изображения для контекста ${context}`, 'info');
+        
+        const https = require('https');
+        const http = require('http');
+        
+        return new Promise((resolve, reject) => {
+            const client = imageUrl.startsWith('https:') ? https : http;
+            
+            client.get(imageUrl, (response) => {
+                if (response.statusCode !== 200) {
+                    sendLogToPropertyInspector(`HTTP ошибка при скачивании: ${response.statusCode}`, 'error');
+                    reject(new Error(`HTTP ${response.statusCode}`));
+                    return;
+                }
+                
+                const chunks = [];
+                let totalLength = 0;
+                
+                response.on('data', (chunk) => {
+                    chunks.push(chunk);
+                    totalLength += chunk.length;
+                });
+                
+                response.on('end', () => {
+                    try {
+                        const buffer = Buffer.concat(chunks, totalLength);
+                        sendLogToPropertyInspector(`Изображение скачано для контекста ${context}, размер: ${buffer.length} байт`, 'info');
+                        
+                        const contentType = response.headers['content-type'] || 'image/jpeg';
+                        const base64Data = buffer.toString('base64');
+                        const dataUrl = `data:${contentType};base64,${base64Data}`;
+                        
+                        sendLogToPropertyInspector(`Установка изображения для контекста ${context}`, 'info');
+                        plugin.setImage(context, dataUrl);
+                        
+                        resolve(dataUrl);
+                        
+                    } catch (error) {
+                        sendLogToPropertyInspector(`Ошибка при обработке изображения для контекста ${context}: ${error.message}`, 'error');
+                        reject(error);
+                    }
+                });
+                
+                response.on('error', (error) => {
+                    sendLogToPropertyInspector(`Ошибка при скачивании для контекста ${context}: ${error.message}`, 'error');
+                    reject(error);
+                });
+                
+            }).on('error', (error) => {
+                sendLogToPropertyInspector(`Ошибка HTTP запроса для контекста ${context}: ${error.message}`, 'error');
+                reject(error);
+            });
+        });
+        
+    } catch (error) {
+        sendLogToPropertyInspector(`Ошибка в downloadAndSetImageForContext: ${error.message}`, 'error');
+        log.error('Ошибка в downloadAndSetImageForContext:', error);
+    }
+}
+
+function parseTimeToSeconds(timeString) {
+    const parts = timeString.split(':');
+    if (parts.length === 2) {
+        const minutes = parseInt(parts[0], 10) || 0;
+        const seconds = parseInt(parts[1], 10) || 0;
+        return minutes * 60 + seconds;
+    }
+    return 0;
+}
+
+function formatSecondsToTime(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+}
+
+function getScrollingText(fullText, position, maxLength) {
+    if (fullText.length <= maxLength) {
+        return fullText;
+    }
+    
+    const padding = '   ';
+    const extendedText = fullText + padding;
+    const totalLength = extendedText.length;
+    
+    let startPos = position % totalLength;
+    let result = '';
+    
+    for (let i = 0; i < maxLength; i++) {
+        result += extendedText[(startPos + i) % totalLength];
+    }
+    
+    return result;
+}
+
+async function checkTrackInfoState() {
+    try {
+        if (buttonContexts.trackInfo.length === 0) {
+            return;
+        }
+        
+        const isConnected = await checkYandexMusicConnection();
+        if (!isConnected) {
+            return;
+        }
+        
+        const trackInfo = await yandexMusic.getTrackInfo();
+        if (trackInfo && trackInfo.title && trackInfo.artist) {
+            const fullText = `${trackInfo.artist} - ${trackInfo.title}`;
+            
+            if (scrollingText.text !== fullText) {
+                scrollingText.text = fullText;
+                scrollingText.position = 0;
+                scrollingText.frameCounter = 0;
+                sendLogToPropertyInspector(`Новый трек для бегущей строки: ${fullText}`, 'info');
+            }
+            
+            const currentPosition = Math.floor(scrollingText.position);
+            const displayText = getScrollingText(scrollingText.text, currentPosition, scrollingText.maxLength);
+            
+            buttonContexts.trackInfo.forEach(context => {
+                plugin.setTitle(context, displayText);
+            });
+            
+            scrollingText.frameCounter++;
+            scrollingText.position += scrollingText.speed;
+        } else {
+            buttonContexts.trackInfo.forEach(context => {
+                plugin.setTitle(context, 'Нет данных');
+            });
+        }
+    } catch (error) {
+        sendLogToPropertyInspector(`Ошибка в checkTrackInfoState: ${error.message}`, 'error');
+        log.error('Ошибка в checkTrackInfoState:', error);
+    }
+}
+
+async function checkTimeState() {
+    try {
+        const hasTimeButtons = buttonContexts.timeTotal.length > 0;
+        
+        if (!hasTimeButtons) {
+            return;
+        }
+        
+        const isConnected = await checkYandexMusicConnection();
+        if (!isConnected) {
+            return;
+        }
+        
+        const timeInfo = await yandexMusic.getTrackTime();
+        if (timeInfo && timeInfo.currentTime && timeInfo.totalTime) {
+            const timeData = {
+                current: timeInfo.currentTime,
+                total: timeInfo.totalTime
+            };
+            
+            if (JSON.stringify(timeData) !== JSON.stringify(lastTimeInfo)) {
+                buttonContexts.timeTotal.forEach(context => {
+                    plugin.setTitle(context, `${timeData.current}\n${timeData.total}`);
+                });
+                
+                lastTimeInfo = timeData;
+                sendLogToPropertyInspector(`Время синхронизировано: ${timeData.current}/${timeData.total}`, 'info');
+            }
+        } else {
+            if (lastTimeInfo) {
+                sendLogToPropertyInspector('Сброс кэша времени из-за ошибки получения данных', 'info');
+                lastTimeInfo = null;
+            }
+        }
+    } catch (error) {
+        sendLogToPropertyInspector(`Ошибка в checkTimeState: ${error.message}`, 'error');
+        log.error('Ошибка в checkTimeState:', error);
+    }
+}
+
+async function checkCoverState() {
+    try {
+        if (buttonContexts.cover.length === 0) {
+            return;
+        }
+        
+        sendLogToPropertyInspector(`Проверка обложки для ${buttonContexts.cover.length} кнопок`, 'info');
+        
+        const isConnected = await checkYandexMusicConnection();
+        if (!isConnected) {
+            sendLogToPropertyInspector('Нет соединения с Яндекс Музыкой для обновления обложки', 'error');
+            return;
+        }
+        
+        sendLogToPropertyInspector('Получение информации о треке...', 'info');
+        const trackInfo = await yandexMusic.getTrackInfo();
+        
+        if (trackInfo && trackInfo.coverUrl) {
+            const trackId = `${trackInfo.title}-${trackInfo.artist}`;
+            const lastTrackId = lastTrackInfo ? `${lastTrackInfo.title}-${lastTrackInfo.artist}` : null;
+            
+            if (trackId === lastTrackId && lastTrackInfo && lastTrackInfo.coverUrl === trackInfo.coverUrl) {
+                return;
+            }
+            
+            sendLogToPropertyInspector(`Найден новый трек: ${trackInfo.title} - ${trackInfo.artist}`, 'info');
+            sendLogToPropertyInspector(`URL обложки: ${trackInfo.coverUrl}`, 'info');
+            if (trackInfo.originalCoverUrl && trackInfo.originalCoverUrl !== trackInfo.coverUrl) {
+                sendLogToPropertyInspector(`Оригинальный URL: ${trackInfo.originalCoverUrl}`, 'info');
+            }
+            
+            try {
+                sendLogToPropertyInspector('Скачивание и установка изображения...', 'info');
+                await downloadAndSetImageAsDataUrl(trackInfo.coverUrl);
+                
+                lastTrackInfo = trackInfo;
+                sendLogToPropertyInspector(`✅ Обложка обновлена для трека: ${trackInfo.title}`, 'info');
+                log.info('Обложка обновлена:', trackInfo.title, 'от', trackInfo.artist);
+                
+            } catch (error) {
+                sendLogToPropertyInspector(`Ошибка при установке изображения: ${error.message}`, 'error');
+                log.error('Ошибка при установке изображения:', error);
+            }
+        } else {
+            sendLogToPropertyInspector('Не удалось получить информацию о треке или обложку', 'error');
+            log.error('Не удалось получить информацию о треке');
+            
+            if (lastTrackInfo) {
+                sendLogToPropertyInspector('Сброс кэша трека из-за ошибки', 'info');
+                lastTrackInfo = null;
+            }
+        }
+    } catch (error) {
+        sendLogToPropertyInspector(`Ошибка в checkCoverState: ${error.message}`, 'error');
+        log.error('Ошибка в checkCoverState:', error);
+    }
+}
+
 function startStateChecks() {
     if (playbackCheckInterval) clearInterval(playbackCheckInterval);
     if (likeCheckInterval) clearInterval(likeCheckInterval);
     if (muteCheckInterval) clearInterval(muteCheckInterval);
+    if (coverCheckInterval) clearInterval(coverCheckInterval);
+    if (timeCheckInterval) clearInterval(timeCheckInterval);
+    if (trackInfoCheckInterval) clearInterval(trackInfoCheckInterval);
     
     playbackCheckInterval = setInterval(checkPlaybackState, 100);
     likeCheckInterval = setInterval(checkLikeState, 100);
     muteCheckInterval = setInterval(checkMuteState, 100);
+    coverCheckInterval = setInterval(checkCoverState, 1000);
+    timeCheckInterval = setInterval(checkTimeState, 500);
+    trackInfoCheckInterval = setInterval(checkTrackInfoState, 100);
     
     log.info('Запущены проверки состояния кнопок');
 }
@@ -577,6 +933,130 @@ plugin["ym-mute"] = new Actions({
                 plugin.showAlert(context);
             }
         });
+    }
+});
+
+plugin["ym-cover"] = new Actions({
+    default: {},
+    async _willAppear({ context, payload }) {
+        log.info("YM Cover появился:", context);
+        sendLogToPropertyInspector(`Инициализация кнопки обложки: ${context}`, 'info');
+        
+        const isNewButton = !buttonContexts.cover.includes(context);
+        
+        if (isNewButton) {
+            buttonContexts.cover.push(context);
+            sendLogToPropertyInspector(`Добавлена кнопка обложки. Всего кнопок: ${buttonContexts.cover.length}`, 'info');
+        } else {
+            sendLogToPropertyInspector(`Кнопка обложки возвращена на страницу: ${context}`, 'info');
+        }
+        
+        sendLogToPropertyInspector('Проверка соединения с Яндекс Музыкой...', 'info');
+        const isConnected = await checkYandexMusicConnection();
+        if (!isConnected) {
+            log.error('Не удалось установить соединение с Яндекс Музыкой');
+            sendLogToPropertyInspector('❌ Не удалось установить соединение с Яндекс Музыкой для кнопки обложки', 'error');
+            plugin.showAlert(context);
+            return;
+        }
+        
+        sendLogToPropertyInspector('✅ Соединение установлено, загружаем обложку...', 'info');
+        
+        if (isNewButton) {
+            sendLogToPropertyInspector('Сброс кэша трека для новой кнопки', 'info');
+            lastTrackInfo = null;
+        } else {
+            sendLogToPropertyInspector('Восстановление обложки для существующей кнопки...', 'info');
+        }
+        
+        sendLogToPropertyInspector('Немедленная загрузка обложки...', 'info');
+        await checkCoverState();
+    },
+    _willDisappear({ context }) {
+        const index = buttonContexts.cover.indexOf(context);
+        if (index !== -1) {
+            buttonContexts.cover.splice(index, 1);
+            sendLogToPropertyInspector(`Удалена кнопка обложки. Осталось кнопок: ${buttonContexts.cover.length}`, 'info');
+        }
+    },
+    keyUp({ context, payload }) {
+        sendLogToPropertyInspector('Кнопка обложки не кликабельная', 'info');
+    }
+});
+
+plugin["ym-track-info"] = new Actions({
+    default: {},
+    async _willAppear({ context, payload }) {
+        log.info("YM Track Info появился:", context);
+        sendLogToPropertyInspector(`Инициализация кнопки информации о треке: ${context}`, 'info');
+        
+        const isNewButton = !buttonContexts.trackInfo.includes(context);
+        
+        if (isNewButton) {
+            buttonContexts.trackInfo.push(context);
+            sendLogToPropertyInspector(`Добавлена кнопка информации о треке. Всего кнопок: ${buttonContexts.trackInfo.length}`, 'info');
+            scrollingText.text = '';
+            scrollingText.position = 0;
+            scrollingText.frameCounter = 0;
+        }
+        
+        const isConnected = await checkYandexMusicConnection();
+        if (!isConnected) {
+            log.error('Не удалось установить соединение с Яндекс Музыкой');
+            sendLogToPropertyInspector('❌ Не удалось установить соединение с Яндекс Музыкой', 'error');
+            plugin.showAlert(context);
+            return;
+        }
+        
+        plugin.setTitle(context, 'Загрузка...');
+        await checkTrackInfoState();
+    },
+    _willDisappear({ context }) {
+        const index = buttonContexts.trackInfo.indexOf(context);
+        if (index !== -1) {
+            buttonContexts.trackInfo.splice(index, 1);
+            sendLogToPropertyInspector(`Удалена кнопка информации о треке. Осталось кнопок: ${buttonContexts.trackInfo.length}`, 'info');
+        }
+    },
+    keyUp({ context, payload }) {
+        sendLogToPropertyInspector('Кнопка информации о треке не кликабельная', 'info');
+    }
+});
+
+plugin["ym-time-total"] = new Actions({
+    default: {},
+    async _willAppear({ context, payload }) {
+        log.info("YM Time Total появился:", context);
+        sendLogToPropertyInspector(`Инициализация кнопки времени (общее): ${context}`, 'info');
+        
+        const isNewButton = !buttonContexts.timeTotal.includes(context);
+        
+        if (isNewButton) {
+            buttonContexts.timeTotal.push(context);
+            sendLogToPropertyInspector(`Добавлена кнопка времени (общее). Всего кнопок: ${buttonContexts.timeTotal.length}`, 'info');
+            lastTimeInfo = null;
+        }
+        
+        const isConnected = await checkYandexMusicConnection();
+        if (!isConnected) {
+            log.error('Не удалось установить соединение с Яндекс Музыкой');
+            sendLogToPropertyInspector('❌ Не удалось установить соединение с Яндекс Музыкой', 'error');
+            plugin.showAlert(context);
+            return;
+        }
+        
+        plugin.setTitle(context, '0:00\n0:00');
+        await checkTimeState();
+    },
+    _willDisappear({ context }) {
+        const index = buttonContexts.timeTotal.indexOf(context);
+        if (index !== -1) {
+            buttonContexts.timeTotal.splice(index, 1);
+            sendLogToPropertyInspector(`Удалена кнопка времени (общее). Осталось кнопок: ${buttonContexts.timeTotal.length}`, 'info');
+        }
+    },
+    keyUp({ context, payload }) {
+        sendLogToPropertyInspector('Кнопка времени не кликабельная', 'info');
     }
 });
 

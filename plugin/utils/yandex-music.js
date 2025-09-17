@@ -305,6 +305,253 @@ class YandexMusicController {
     }
   }
 
+  async getTrackInfo() {
+    let client;
+    try {
+      log.info('Подключение к приложению Яндекс.Музыка на порту', this.port);
+      
+      try {
+        client = await CDP({ port: this.port });
+      } catch (connErr) {
+        if (connErr.message.includes('connect ECONNREFUSED')) {
+          log.error('Не удалось подключиться к приложению Яндекс.Музыка на порту', this.port);
+          log.error('Убедитесь, что приложение запущено с параметром --remote-debugging-port=9222');
+          return null;
+        }
+        throw connErr;
+      }
+      
+      const { Runtime, Page } = client;
+      
+      await Promise.all([
+        Page.enable(),
+        Runtime.enable()
+      ]);
+      
+      log.info('Получение информации о треке...');
+      log.info('Выполнение JavaScript кода для поиска элементов трека...');
+      
+      const result = await Runtime.evaluate({
+        expression: `
+          (function() {
+            try {
+              let playerBar = document.querySelector('.PlayerBarDesktopWithBackgroundProgressBar_root__bpmwN');
+              if (!playerBar) {
+                playerBar = document.querySelector('[data-test-id="PLAYERBAR_DESKTOP"]');
+                if (!playerBar) {
+                  console.log("Не найдена нижняя панель плеера");
+                  return { success: false, message: 'Не найдена нижняя панель плеера' };
+                }
+              }
+              
+              const coverImg = playerBar.querySelector('img.PlayerBarDesktopWithBackgroundProgressBar_cover__MKmEt');
+              const titleElement = playerBar.querySelector('[data-test-id="TRACK_TITLE"] .Meta_title__GGBnH');
+              const artistElement = playerBar.querySelector('[data-test-id="SEPARATED_ARTIST_TITLE"] .Meta_artistCaption__JESZi');
+              
+              if (coverImg && titleElement && artistElement) {
+                const originalCoverUrl = coverImg.src;
+                const title = titleElement.textContent;
+                const artist = artistElement.textContent;
+                
+                let coverUrl = originalCoverUrl;
+                if (originalCoverUrl.includes('/100x100')) {
+                  coverUrl = originalCoverUrl.replace('/100x100', '/400x400');
+                  console.log("Увеличен размер обложки с 100x100 до 400x400");
+                } else if (originalCoverUrl.includes('/200x200')) {
+                  coverUrl = originalCoverUrl.replace('/200x200', '/400x400');
+                  console.log("Увеличен размер обложки с 200x200 до 400x400");
+                }
+                
+                console.log("Найдена информация о треке:", { title, artist, originalCoverUrl, coverUrl });
+                
+                return { 
+                  success: true, 
+                  coverUrl: coverUrl,
+                  originalCoverUrl: originalCoverUrl,
+                  title: title,
+                  artist: artist
+                };
+              } else {
+                console.log("Не удалось найти полную информацию о треке");
+                return { 
+                  success: false, 
+                  message: 'Не удалось найти информацию о треке' 
+                };
+              }
+            } catch (err) {
+              return { 
+                success: false, 
+                message: 'Ошибка при получении информации о треке: ' + err.message,
+                error: err.toString()
+              };
+            }
+          })()
+        `,
+        awaitPromise: true,
+        returnByValue: true
+      });
+      
+      if (result.result && result.result.value) {
+        const value = result.result.value;
+        
+        if (value.success) {
+          log.info('Информация о треке получена успешно:', value.title, 'от', value.artist);
+          log.info('URL обложки:', value.coverUrl);
+          return {
+            coverUrl: value.coverUrl,
+            title: value.title,
+            artist: value.artist
+          };
+        } else {
+          log.error('Не удалось получить информацию о треке:', value.message);
+          log.error('Проверьте, что трек воспроизводится в Яндекс Музыке');
+          
+          if (value.error) {
+            log.error('Детали ошибки:', value.error);
+          }
+          
+          return null;
+        }
+      } else {
+        log.error('Не удалось выполнить скрипт в контексте страницы');
+        return null;
+      }
+    } catch (err) {
+      log.error('Ошибка при выполнении скрипта:', err);
+      return null;
+    } finally {
+      if (client) {
+        try {
+          await client.close();
+        } catch (closeErr) {
+          log.error('Ошибка при закрытии соединения:', closeErr);
+        }
+      }
+    }
+  }
+
+  async getTrackTime() {
+    let client;
+    try {
+      log.info('Подключение к приложению Яндекс.Музыка на порту', this.port);
+      
+      try {
+        client = await CDP({ port: this.port });
+      } catch (connErr) {
+        if (connErr.message.includes('connect ECONNREFUSED')) {
+          log.error('Не удалось подключиться к приложению Яндекс.Музыка на порту', this.port);
+          log.error('Убедитесь, что приложение запущено с параметром --remote-debugging-port=9222');
+          return null;
+        }
+        throw connErr;
+      }
+      
+      const { Runtime, Page } = client;
+      
+      await Promise.all([
+        Page.enable(),
+        Runtime.enable()
+      ]);
+      
+      log.info('Получение информации о времени трека...');
+      
+      const result = await Runtime.evaluate({
+        expression: `
+          (function() {
+            try {
+              let playerBar = document.querySelector('.PlayerBarDesktopWithBackgroundProgressBar_root__bpmwN');
+              if (!playerBar) {
+                playerBar = document.querySelector('[data-test-id="PLAYERBAR_DESKTOP"]');
+                if (!playerBar) {
+                  console.log("Не найдена нижняя панель плеера");
+                  return { success: false, message: 'Не найдена нижняя панель плеера' };
+                }
+              }
+              
+              const currentTimeElement = playerBar.querySelector('[data-test-id="TIMECODE_TIME_START"]');
+              const totalTimeElement = playerBar.querySelector('[data-test-id="TIMECODE_TIME_END"]');
+              const progressSlider = playerBar.querySelector('[data-test-id="TIMECODE_SLIDER"]');
+              
+              if (currentTimeElement && totalTimeElement && progressSlider) {
+                const currentTimeText = currentTimeElement.textContent.trim();
+                const totalTimeText = totalTimeElement.textContent.trim();
+                const progressValue = parseFloat(progressSlider.value) || 0;
+                const progressMax = parseFloat(progressSlider.max) || 100;
+                
+                console.log("Найдена информация о времени:", { 
+                  currentTimeText, 
+                  totalTimeText, 
+                  progressValue, 
+                  progressMax 
+                });
+                
+                return { 
+                  success: true, 
+                  currentTime: currentTimeText,
+                  totalTime: totalTimeText,
+                  progressValue: progressValue,
+                  progressMax: progressMax,
+                  progressPercent: (progressValue / progressMax) * 100
+                };
+              } else {
+                console.log("Не удалось найти элементы времени трека");
+                return { 
+                  success: false, 
+                  message: 'Не удалось найти элементы времени трека' 
+                };
+              }
+            } catch (err) {
+              return { 
+                success: false, 
+                message: 'Ошибка при получении времени трека: ' + err.message,
+                error: err.toString()
+              };
+            }
+          })()
+        `,
+        awaitPromise: true,
+        returnByValue: true
+      });
+      
+      if (result.result && result.result.value) {
+        const value = result.result.value;
+        
+        if (value.success) {
+          log.info('Информация о времени трека получена успешно:', value.currentTime, '/', value.totalTime);
+          return {
+            currentTime: value.currentTime,
+            totalTime: value.totalTime,
+            progressValue: value.progressValue,
+            progressMax: value.progressMax,
+            progressPercent: value.progressPercent
+          };
+        } else {
+          log.error('Не удалось получить информацию о времени трека:', value.message);
+          
+          if (value.error) {
+            log.error('Детали ошибки:', value.error);
+          }
+          
+          return null;
+        }
+      } else {
+        log.error('Не удалось выполнить скрипт в контексте страницы');
+        return null;
+      }
+    } catch (err) {
+      log.error('Ошибка при выполнении скрипта:', err);
+      return null;
+    } finally {
+      if (client) {
+        try {
+          await client.close();
+        } catch (closeErr) {
+          log.error('Ошибка при закрытии соединения:', closeErr);
+        }
+      }
+    }
+  }
+
   async toggleMute() {
     let client;
     try {
