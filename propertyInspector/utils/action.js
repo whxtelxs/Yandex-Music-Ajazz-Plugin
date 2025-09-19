@@ -1,6 +1,7 @@
 let $websocket, $uuid, $action, $context, $settings, $lang, $FileID = '';
 
 WebSocket.prototype.setGlobalSettings = function(payload) {
+    console.log('Отправка глобальных настроек:', payload);
     this.send(JSON.stringify({
         event: "setGlobalSettings",
         context: $uuid, payload
@@ -8,6 +9,7 @@ WebSocket.prototype.setGlobalSettings = function(payload) {
 }
 
 WebSocket.prototype.getGlobalSettings = function() {
+    console.log('Запрос глобальных настроек');
     this.send(JSON.stringify({
         event: "getGlobalSettings",
         context: $uuid,
@@ -15,6 +17,7 @@ WebSocket.prototype.getGlobalSettings = function() {
 }
 
 WebSocket.prototype.sendToPlugin = function (payload) {
+    console.log('Отправка сообщения в плагин:', payload);
     this.send(JSON.stringify({
         event: "sendToPlugin",
         action: $action,
@@ -24,10 +27,11 @@ WebSocket.prototype.sendToPlugin = function (payload) {
 };
 
 function sendValueToPlugin(payload) {
+    console.log('Попытка отправки в плагин:', payload);
     if ($websocket && $websocket.readyState === 1) {
         $websocket.sendToPlugin(payload);
     } else {
-        console.error('WebSocket не готов для отправки данных');
+        console.error('WebSocket не готов для отправки данных. Состояние:', $websocket ? $websocket.readyState : 'undefined');
     }
 }
 
@@ -98,6 +102,7 @@ function debounce(func, delay) {
 }
 
 WebSocket.prototype.saveData = debounce(function (payload) {
+    console.log('Сохранение настроек:', payload);
     this.send(JSON.stringify({
         event: "setSettings",
         context: $uuid,
@@ -107,13 +112,19 @@ WebSocket.prototype.saveData = debounce(function (payload) {
 
 const connectSocket = connectElgatoStreamDeckSocket;
 async function connectElgatoStreamDeckSocket(port, uuid, event, app, info) {
+    console.log('Подключение к StreamDeck WebSocket:', { port, uuid, event });
     info = JSON.parse(info);
     $uuid = uuid; $action = info.action; 
     $context = info.context;
     $websocket = new WebSocket('ws://127.0.0.1:' + port);
-    $websocket.onopen = () => $websocket.send(JSON.stringify({ event, uuid }));
+    
+    $websocket.onopen = () => {
+        console.log('WebSocket соединение открыто');
+        $websocket.send(JSON.stringify({ event, uuid }));
+    };
 
     $websocket.onmessage = e => {
+        console.log('Получено сообщение от StreamDeck:', e.data);
         let data = JSON.parse(e.data);
         if (data.event === 'didReceiveSettings') {
             $settings = new Proxy(data.payload.settings, {
@@ -135,6 +146,14 @@ async function connectElgatoStreamDeckSocket(port, uuid, event, app, info) {
         if ($propEvent && typeof $propEvent[data.event] === 'function') {
             $propEvent[data.event](data.payload);
         }
+    };
+    
+    $websocket.onclose = (event) => {
+        console.log('WebSocket соединение закрыто:', event);
+    };
+    
+    $websocket.onerror = (error) => {
+        console.error('WebSocket ошибка:', error);
     };
 
     if (!$local) return;

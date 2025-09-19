@@ -23,7 +23,17 @@
                     <button id="checkConnectionBtn" class="btn btn-primary w-100">Проверить соединение</button>
                 </div>
                 <div class="mb-3">
-                    <p class="text-muted small">Убедитесь, что Яндекс Музыка запущена с параметром --remote-debugging-port=9222</p>
+                    <label for="debugPort" class="form-label">Порт отладки:</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" id="debugPort" value="9222" min="1" max="65535">
+                        <button id="savePortBtn" class="btn btn-success">Сохранить</button>
+                    </div>
+                    <div class="form-text text-muted mt-1">
+                        Порт должен совпадать с параметром --remote-debugging-port в Яндекс Музыке
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <p class="text-muted small" id="portHint">Убедитесь, что Яндекс Музыка запущена с параметром --remote-debugging-port=9222</p>
                 </div>
             </div>
         </div>

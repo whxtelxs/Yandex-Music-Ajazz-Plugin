@@ -182,7 +182,7 @@
   "Description": "Плагин для управления Yandex Music через Ajazz.",
   "Category": "Yandex Music",
   "CategoryIcon": "static/App-logo.png",
-  "Version": "1.1.0",
+  "Version": "1.2.0",
   "URL": "https://whxtelxs.dev",
   "OS": [
     {

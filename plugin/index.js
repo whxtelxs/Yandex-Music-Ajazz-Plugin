@@ -4,6 +4,12 @@ const yandexMusic = require('./utils/yandex-music');
 
 const plugin = new Plugins('demo');
 
+yandexMusic.connect().then(() => {
+  log.info('Инициализация CDP соединения выполнена при запуске плагина');
+}).catch(err => {
+  log.error('Ошибка при инициализации CDP соединения:', err);
+});
+
 const buttonContexts = {
     playPause: [],
     like: [],
@@ -32,6 +38,16 @@ let trackInfoCheckInterval = null;
 
 plugin.didReceiveGlobalSettings = ({ payload: { settings } }) => {
     log.info('didReceiveGlobalSettings', settings);
+    
+    if (settings && settings.debugPort) {
+        const savedPort = parseInt(settings.debugPort);
+        if (!isNaN(savedPort) && savedPort >= 1 && savedPort <= 65535) {
+            log.info(`Загружен сохраненный порт: ${savedPort}`);
+            yandexMusic.setPort(savedPort).then(success => {
+                log.info(`Результат установки порта ${savedPort}: ${success ? 'успешно' : 'ошибка'}`);
+            });
+        }
+    }
 };
 
 const createSvg = (text) => `<svg width="144" height="144" xmlns="http://www.w3.org/2000/svg">
@@ -42,7 +58,6 @@ const createSvg = (text) => `<svg width="144" height="144" xmlns="http://www.w3.
 </svg>`;
 const timers = {};
 
-// Вырезанная функция в prod
 function sendLogToPropertyInspector(message, type = 'info') {
     return;
 }
@@ -124,9 +139,6 @@ async function checkPlaybackState() {
     try {
         if (buttonContexts.playPause.length === 0) return;
         
-        const isConnected = await checkYandexMusicConnection();
-        if (!isConnected) return;
-        
         let client;
         try {
             client = await yandexMusic.getClient();
@@ -175,14 +187,6 @@ async function checkPlaybackState() {
             }
         } catch (error) {
             log.error('Ошибка при проверке состояния воспроизведения:', error);
-        } finally {
-            if (client) {
-                try {
-                    await client.close();
-                } catch (closeErr) {
-                    log.error('Ошибка при закрытии соединения:', closeErr);
-                }
-            }
         }
     } catch (error) {
         log.error('Ошибка в checkPlaybackState:', error);
@@ -192,9 +196,6 @@ async function checkPlaybackState() {
 async function checkLikeState() {
     try {
         if (buttonContexts.like.length === 0) return;
-        
-        const isConnected = await checkYandexMusicConnection();
-        if (!isConnected) return;
         
         let client;
         try {
@@ -273,14 +274,6 @@ async function checkLikeState() {
             }
         } catch (error) {
             log.error('Ошибка при проверке состояния лайка:', error);
-        } finally {
-            if (client) {
-                try {
-                    await client.close();
-                } catch (closeErr) {
-                    log.error('Ошибка при закрытии соединения:', closeErr);
-                }
-            }
         }
     } catch (error) {
         log.error('Ошибка в checkLikeState:', error);
@@ -290,9 +283,6 @@ async function checkLikeState() {
 async function checkMuteState() {
     try {
         if (buttonContexts.mute.length === 0) return;
-        
-        const isConnected = await checkYandexMusicConnection();
-        if (!isConnected) return;
         
         let client;
         try {
@@ -334,14 +324,6 @@ async function checkMuteState() {
             }
         } catch (error) {
             log.error('Ошибка при проверке состояния звука:', error);
-        } finally {
-            if (client) {
-                try {
-                    await client.close();
-                } catch (closeErr) {
-                    log.error('Ошибка при закрытии соединения:', closeErr);
-                }
-            }
         }
     } catch (error) {
         log.error('Ошибка в checkMuteState:', error);
@@ -476,11 +458,6 @@ async function checkTrackInfoState() {
             return;
         }
         
-        const isConnected = await checkYandexMusicConnection();
-        if (!isConnected) {
-            return;
-        }
-        
         const trackInfo = await yandexMusic.getTrackInfo();
         if (trackInfo && trackInfo.title && trackInfo.artist) {
             const fullText = `${trackInfo.artist} - ${trackInfo.title}`;
@@ -520,11 +497,6 @@ async function checkTimeState() {
             return;
         }
         
-        const isConnected = await checkYandexMusicConnection();
-        if (!isConnected) {
-            return;
-        }
-        
         const timeInfo = await yandexMusic.getTrackTime();
         if (timeInfo && timeInfo.currentTime && timeInfo.totalTime) {
             const timeData = {
@@ -559,12 +531,6 @@ async function checkCoverState() {
         }
         
         sendLogToPropertyInspector(`Проверка обложки для ${buttonContexts.cover.length} кнопок`, 'info');
-        
-        const isConnected = await checkYandexMusicConnection();
-        if (!isConnected) {
-            sendLogToPropertyInspector('Нет соединения с Яндекс Музыкой для обновления обложки', 'error');
-            return;
-        }
         
         sendLogToPropertyInspector('Получение информации о треке...', 'info');
         const trackInfo = await yandexMusic.getTrackInfo();
@@ -618,14 +584,14 @@ function startStateChecks() {
     if (timeCheckInterval) clearInterval(timeCheckInterval);
     if (trackInfoCheckInterval) clearInterval(trackInfoCheckInterval);
     
-    playbackCheckInterval = setInterval(checkPlaybackState, 100);
-    likeCheckInterval = setInterval(checkLikeState, 100);
-    muteCheckInterval = setInterval(checkMuteState, 100);
-    coverCheckInterval = setInterval(checkCoverState, 1000);
-    timeCheckInterval = setInterval(checkTimeState, 500);
-    trackInfoCheckInterval = setInterval(checkTrackInfoState, 100);
+    playbackCheckInterval = setInterval(checkPlaybackState, 500);
+    likeCheckInterval = setInterval(checkLikeState, 1000);
+    muteCheckInterval = setInterval(checkMuteState, 1000);
+    coverCheckInterval = setInterval(checkCoverState, 3000);
+    timeCheckInterval = setInterval(checkTimeState, 1000);
+    trackInfoCheckInterval = setInterval(checkTrackInfoState, 500);
     
-    log.info('Запущены проверки состояния кнопок');
+    log.info('Запущены проверки состояния кнопок с оптимизированными интервалами');
 }
 
 startStateChecks();
@@ -651,52 +617,6 @@ plugin.demo = new Actions({
         timers[context] && clearInterval(timers[context]);
     },
     _propertyInspectorDidAppear({ context }) {
-    },
-    sendToPlugin({ payload, context }) {
-        if (payload && payload.command) {
-            log.info('Получена команда:', payload.command);
-            
-            switch (payload.command) {
-                case 'checkConnection':
-                    checkYandexMusicConnection().then(isConnected => {
-                        plugin.sendToPropertyInspector({
-                            command: 'connectionStatus',
-                            status: isConnected ? 'connected' : 'disconnected'
-                        }, context, 'com.whxtelxs.streamdock.yandexmusicajazz.demo');
-                    });
-                    break;
-                case 'togglePlayback':
-                    yandexMusic.togglePlayback().then(result => {
-                        log.info('Результат переключения воспроизведения:', result);
-                    });
-                    break;
-                case 'previousTrack':
-                    yandexMusic.previousTrack().then(result => {
-                        log.info('Результат перехода к предыдущему треку:', result);
-                    });
-                    break;
-                case 'nextTrack':
-                    yandexMusic.nextTrack().then(result => {
-                        log.info('Результат перехода к следующему треку:', result);
-                    });
-                    break;
-                case 'likeTrack':
-                    yandexMusic.likeTrack().then(result => {
-                        log.info('Результат установки лайка:', result);
-                    });
-                    break;
-                case 'dislikeTrack':
-                    yandexMusic.dislikeTrack().then(result => {
-                        log.info('Результат установки дизлайка:', result);
-                    });
-                    break;
-                case 'toggleMute':
-                    yandexMusic.toggleMute().then(result => {
-                        log.info('Результат переключения звука:', result);
-                    });
-                    break;
-            }
-        }
     },
     keyUp({ context, payload }) {
         checkYandexMusicConnection().then(isConnected => {
@@ -728,13 +648,6 @@ plugin["ym-play-pause"] = new Actions({
             buttonContexts.playPause.push(context);
         }
         
-        const isConnected = await checkYandexMusicConnection();
-        if (!isConnected) {
-            log.error('Не удалось установить соединение с Яндекс Музыкой');
-            plugin.showAlert(context);
-            return;
-        }
-        
         await checkPlaybackState();
     },
     _willDisappear({ context }) {
@@ -743,21 +656,16 @@ plugin["ym-play-pause"] = new Actions({
             buttonContexts.playPause.splice(index, 1);
         }
     },
-    keyUp({ context, payload }) {
-        checkYandexMusicConnection().then(isConnected => {
-            if (isConnected) {
-                log.info('Соединение с Яндекс Музыкой установлено');
-                
-                yandexMusic.togglePlayback().then(result => {
-                    if (!result) {
-                        plugin.showAlert(context);
-                    }
-                });
-            } else {
-                log.error('Нет соединения с Яндекс Музыкой');
+    async keyUp({ context, payload }) {
+        try {
+            const result = await yandexMusic.togglePlayback();
+            if (!result) {
                 plugin.showAlert(context);
             }
-        });
+        } catch (error) {
+            log.error('Ошибка при переключении воспроизведения:', error);
+            plugin.showAlert(context);
+        }
     }
 });
 
@@ -765,28 +673,17 @@ plugin["ym-previous"] = new Actions({
     default: {},
     async _willAppear({ context, payload }) {
         log.info("YM Previous появился:", context);
-        
-        const isConnected = await checkYandexMusicConnection();
-        if (!isConnected) {
-            log.error('Не удалось установить соединение с Яндекс Музыкой');
-            plugin.showAlert(context);
-        }
     },
-    keyUp({ context, payload }) {
-        checkYandexMusicConnection().then(isConnected => {
-            if (isConnected) {
-                log.info('Соединение с Яндекс Музыкой установлено');
-                
-                yandexMusic.previousTrack().then(result => {
-                    if (!result) {
-                        plugin.showAlert(context);
-                    }
-                });
-            } else {
-                log.error('Нет соединения с Яндекс Музыкой');
+    async keyUp({ context, payload }) {
+        try {
+            const result = await yandexMusic.previousTrack();
+            if (!result) {
                 plugin.showAlert(context);
             }
-        });
+        } catch (error) {
+            log.error('Ошибка при переходе к предыдущему треку:', error);
+            plugin.showAlert(context);
+        }
     }
 });
 
@@ -794,28 +691,17 @@ plugin["ym-next"] = new Actions({
     default: {},
     async _willAppear({ context, payload }) {
         log.info("YM Next появился:", context);
-        
-        const isConnected = await checkYandexMusicConnection();
-        if (!isConnected) {
-            log.error('Не удалось установить соединение с Яндекс Музыкой');
-            plugin.showAlert(context);
-        }
     },
-    keyUp({ context, payload }) {
-        checkYandexMusicConnection().then(isConnected => {
-            if (isConnected) {
-                log.info('Соединение с Яндекс Музыкой установлено');
-                
-                yandexMusic.nextTrack().then(result => {
-                    if (!result) {
-                        plugin.showAlert(context);
-                    }
-                });
-            } else {
-                log.error('Нет соединения с Яндекс Музыкой');
+    async keyUp({ context, payload }) {
+        try {
+            const result = await yandexMusic.nextTrack();
+            if (!result) {
                 plugin.showAlert(context);
             }
-        });
+        } catch (error) {
+            log.error('Ошибка при переходе к следующему треку:', error);
+            plugin.showAlert(context);
+        }
     }
 });
 
@@ -830,13 +716,6 @@ plugin["ym-like"] = new Actions({
             buttonContexts.like.push(context);
         }
         
-        const isConnected = await checkYandexMusicConnection();
-        if (!isConnected) {
-            log.error('Не удалось установить соединение с Яндекс Музыкой');
-            plugin.showAlert(context);
-            return;
-        }
-        
         await checkLikeState();
     },
     _willDisappear({ context }) {
@@ -845,21 +724,16 @@ plugin["ym-like"] = new Actions({
             buttonContexts.like.splice(index, 1);
         }
     },
-    keyUp({ context, payload }) {
-        checkYandexMusicConnection().then(isConnected => {
-            if (isConnected) {
-                log.info('Соединение с Яндекс Музыкой установлено');
-                
-                yandexMusic.likeTrack().then(result => {
-                    if (!result) {
-                        plugin.showAlert(context);
-                    }
-                });
-            } else {
-                log.error('Нет соединения с Яндекс Музыкой');
+    async keyUp({ context, payload }) {
+        try {
+            const result = await yandexMusic.likeTrack();
+            if (!result) {
                 plugin.showAlert(context);
             }
-        });
+        } catch (error) {
+            log.error('Ошибка при установке лайка:', error);
+            plugin.showAlert(context);
+        }
     }
 });
 
@@ -867,28 +741,17 @@ plugin["ym-dislike"] = new Actions({
     default: {},
     async _willAppear({ context, payload }) {
         log.info("YM Dislike появился:", context);
-        
-        const isConnected = await checkYandexMusicConnection();
-        if (!isConnected) {
-            log.error('Не удалось установить соединение с Яндекс Музыкой');
-            plugin.showAlert(context);
-        }
     },
-    keyUp({ context, payload }) {
-        checkYandexMusicConnection().then(isConnected => {
-            if (isConnected) {
-                log.info('Соединение с Яндекс Музыкой установлено');
-                
-                yandexMusic.dislikeTrack().then(result => {
-                    if (!result) {
-                        plugin.showAlert(context);
-                    }
-                });
-            } else {
-                log.error('Нет соединения с Яндекс Музыкой');
+    async keyUp({ context, payload }) {
+        try {
+            const result = await yandexMusic.dislikeTrack();
+            if (!result) {
                 plugin.showAlert(context);
             }
-        });
+        } catch (error) {
+            log.error('Ошибка при установке дизлайка:', error);
+            plugin.showAlert(context);
+        }
     }
 });
 
@@ -903,13 +766,6 @@ plugin["ym-mute"] = new Actions({
             buttonContexts.mute.push(context);
         }
         
-        const isConnected = await checkYandexMusicConnection();
-        if (!isConnected) {
-            log.error('Не удалось установить соединение с Яндекс Музыкой');
-            plugin.showAlert(context);
-            return;
-        }
-        
         await checkMuteState();
     },
     _willDisappear({ context }) {
@@ -918,21 +774,16 @@ plugin["ym-mute"] = new Actions({
             buttonContexts.mute.splice(index, 1);
         }
     },
-    keyUp({ context, payload }) {
-        checkYandexMusicConnection().then(isConnected => {
-            if (isConnected) {
-                log.info('Соединение с Яндекс Музыкой установлено');
-                
-                yandexMusic.toggleMute().then(result => {
-                    if (!result) {
-                        plugin.showAlert(context);
-                    }
-                });
-            } else {
-                log.error('Нет соединения с Яндекс Музыкой');
+    async keyUp({ context, payload }) {
+        try {
+            const result = await yandexMusic.toggleMute();
+            if (!result) {
                 plugin.showAlert(context);
             }
-        });
+        } catch (error) {
+            log.error('Ошибка при переключении звука:', error);
+            plugin.showAlert(context);
+        }
     }
 });
 
@@ -949,15 +800,6 @@ plugin["ym-cover"] = new Actions({
             sendLogToPropertyInspector(`Добавлена кнопка обложки. Всего кнопок: ${buttonContexts.cover.length}`, 'info');
         } else {
             sendLogToPropertyInspector(`Кнопка обложки возвращена на страницу: ${context}`, 'info');
-        }
-        
-        sendLogToPropertyInspector('Проверка соединения с Яндекс Музыкой...', 'info');
-        const isConnected = await checkYandexMusicConnection();
-        if (!isConnected) {
-            log.error('Не удалось установить соединение с Яндекс Музыкой');
-            sendLogToPropertyInspector('❌ Не удалось установить соединение с Яндекс Музыкой для кнопки обложки', 'error');
-            plugin.showAlert(context);
-            return;
         }
         
         sendLogToPropertyInspector('✅ Соединение установлено, загружаем обложку...', 'info');
@@ -1000,14 +842,6 @@ plugin["ym-track-info"] = new Actions({
             scrollingText.frameCounter = 0;
         }
         
-        const isConnected = await checkYandexMusicConnection();
-        if (!isConnected) {
-            log.error('Не удалось установить соединение с Яндекс Музыкой');
-            sendLogToPropertyInspector('❌ Не удалось установить соединение с Яндекс Музыкой', 'error');
-            plugin.showAlert(context);
-            return;
-        }
-        
         plugin.setTitle(context, 'Загрузка...');
         await checkTrackInfoState();
     },
@@ -1037,14 +871,6 @@ plugin["ym-time-total"] = new Actions({
             lastTimeInfo = null;
         }
         
-        const isConnected = await checkYandexMusicConnection();
-        if (!isConnected) {
-            log.error('Не удалось установить соединение с Яндекс Музыкой');
-            sendLogToPropertyInspector('❌ Не удалось установить соединение с Яндекс Музыкой', 'error');
-            plugin.showAlert(context);
-            return;
-        }
-        
         plugin.setTitle(context, '0:00\n0:00');
         await checkTimeState();
     },
@@ -1063,17 +889,104 @@ plugin["ym-time-total"] = new Actions({
 plugin.ws.on('message', (data) => {
     try {
         const message = JSON.parse(data.toString());
+        log.info('Получено сообщение от StreamDeck:', message.event, message.action);
         
-        if (message.event === 'sendToPlugin' && message.payload && message.payload.command === 'checkConnection') {
-            log.info('Получена команда проверки соединения от Property Inspector');
-            checkYandexMusicConnection().then(isConnected => {
-                plugin.sendToPropertyInspector({
-                    command: 'connectionStatus',
-                    status: isConnected ? 'connected' : 'disconnected'
-                }, message.context, message.action);
-            });
+        if (message.event === 'sendToPlugin' && message.payload && message.payload.command) {
+            log.info('Получена команда от Property Inspector:', message.payload.command, message.payload);
+            
+            const { command } = message.payload;
+            const context = message.context;
+            const action = message.action;
+            
+            switch (command) {
+                case 'checkConnection':
+                    log.info('Выполняем проверку соединения');
+                    yandexMusic.checkConnection().then(isConnected => {
+                        log.info('Результат проверки соединения:', isConnected ? 'подключено' : 'не подключено');
+                        plugin.sendToPropertyInspector({
+                            command: 'connectionStatus',
+                            status: isConnected ? 'connected' : 'disconnected'
+                        }, context, action);
+                    });
+                    break;
+                case 'changePort':
+                    if (message.payload.port) {
+                        const newPort = parseInt(message.payload.port);
+                        if (isNaN(newPort) || newPort < 1 || newPort > 65535) {
+                            log.error('Некорректный порт:', message.payload.port);
+                            return;
+                        }
+                        
+                        log.info(`Изменение порта на ${newPort}...`);
+                        
+                        const settings = {
+                            debugPort: newPort
+                        };
+                        plugin.setGlobalSettings(settings);
+                        
+                        yandexMusic.setPort(newPort).then(success => {
+                            log.info(`Результат изменения порта: ${success ? 'успешно' : 'ошибка'}`);
+                            
+                            plugin.sendToPropertyInspector({
+                                command: 'portChanged',
+                                port: newPort,
+                                success: success
+                            }, context, action);
+                        });
+                    }
+                    break;
+                case 'togglePlayback':
+                    yandexMusic.togglePlayback().then(result => {
+                        log.info('Результат переключения воспроизведения:', result);
+                    });
+                    break;
+                case 'previousTrack':
+                    yandexMusic.previousTrack().then(result => {
+                        log.info('Результат перехода к предыдущему треку:', result);
+                    });
+                    break;
+                case 'nextTrack':
+                    yandexMusic.nextTrack().then(result => {
+                        log.info('Результат перехода к следующему треку:', result);
+                    });
+                    break;
+                case 'likeTrack':
+                    yandexMusic.likeTrack().then(result => {
+                        log.info('Результат установки лайка:', result);
+                    });
+                    break;
+                case 'dislikeTrack':
+                    yandexMusic.dislikeTrack().then(result => {
+                        log.info('Результат установки дизлайка:', result);
+                    });
+                    break;
+                case 'toggleMute':
+                    yandexMusic.toggleMute().then(result => {
+                        log.info('Результат переключения звука:', result);
+                    });
+                    break;
+            }
         }
     } catch (error) {
         log.error('Ошибка при обработке сообщения от Property Inspector:', error);
     }
 });
+
+plugin.sendToPropertyInspector = function(payload, context, action) {
+    log.info('Отправка сообщения в Property Inspector:', payload);
+    
+    if (!action) {
+        action = Actions.actions[context];
+        
+        if (!action) {
+            action = 'com.whxtelxs.streamdock.yandexmusicajazz.demo';
+        }
+    }
+    
+    this.ws.send(JSON.stringify({
+        action: action,
+        context: context || Actions.currentContext,
+        payload, 
+        event: "sendToPropertyInspector"
+    }));
+};

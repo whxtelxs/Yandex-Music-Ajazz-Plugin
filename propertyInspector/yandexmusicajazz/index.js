@@ -42,6 +42,8 @@ function addLog(message, type = 'info') {
     if (allLogs.length > 1000) {
         allLogs = allLogs.slice(-1000);
     }
+
+    console.log(`[${type}] ${message}`);
 }
 
 function clearLogs() {
@@ -220,114 +222,112 @@ function fallbackCopyTextToClipboard(text) {
 }
 
 function initUI() {
-    const connectionStatus = $('#connectionStatus');
-    const checkConnectionBtn = $('#checkConnectionBtn');
-    const clearLogsBtn = $('#clearLogsBtn');
-    const openLogsWindowBtn = $('#openLogsWindowBtn');
-    const copyLogsBtn = $('#copyLogsBtn');
-    const togglePlaybackBtn = $('#togglePlaybackBtn');
-    const prevTrackBtn = $('#prevTrackBtn');
-    const nextTrackBtn = $('#nextTrackBtn');
-    const likeTrackBtn = $('#likeTrackBtn');
-    const dislikeTrackBtn = $('#dislikeTrackBtn');
-    const toggleMuteBtn = $('#toggleMuteBtn');
+    console.log('Инициализация UI Property Inspector...');
     
-    if (!connectionStatus || !checkConnectionBtn) {
-        console.error('Не удалось найти элементы DOM для статуса соединения');
-        addLog('Ошибка: Не удалось найти элементы DOM для статуса соединения', 'error');
+    if (!$websocket || $websocket.readyState !== 1) {
+        console.error('WebSocket не готов, состояние:', $websocket ? $websocket.readyState : 'undefined');
+        setTimeout(initUI, 500);
         return;
     }
     
-    addLog('Инициализация Property Inspector...', 'info');
-    addLog('Проверка соединения с Яндекс Музыкой...', 'info');
-    sendValueToPlugin({ command: 'checkConnection' });
-    
-    checkConnectionBtn.addEventListener('click', () => {
-        connectionStatus.textContent = 'Проверка...';
-        connectionStatus.className = 'badge bg-warning';
-        addLog('Запрос проверки соединения...', 'info');
-        sendValueToPlugin({ command: 'checkConnection' });
-    });
-    
-    if (clearLogsBtn) {
-        clearLogsBtn.addEventListener('click', () => {
-            clearLogs();
-        });
-    }
-    
-    if (openLogsWindowBtn) {
-        openLogsWindowBtn.addEventListener('click', () => {
-            openLogsWindow();
-        });
-    }
-    
-    if (copyLogsBtn) {
-        copyLogsBtn.addEventListener('click', () => {
-            copyLogs();
-        });
-    }
-    
-    if (togglePlaybackBtn) {
-        togglePlaybackBtn.addEventListener('click', () => {
-            sendValueToPlugin({ command: 'togglePlayback' });
-        });
-    }
-    
-    if (prevTrackBtn) {
-        prevTrackBtn.addEventListener('click', () => {
-            sendValueToPlugin({ command: 'previousTrack' });
-        });
-    }
-    
-    if (nextTrackBtn) {
-        nextTrackBtn.addEventListener('click', () => {
-            sendValueToPlugin({ command: 'nextTrack' });
-        });
-    }
-    
-    if (likeTrackBtn) {
-        likeTrackBtn.addEventListener('click', () => {
-            sendValueToPlugin({ command: 'likeTrack' });
-        });
-    }
-    
-    if (dislikeTrackBtn) {
-        dislikeTrackBtn.addEventListener('click', () => {
-            sendValueToPlugin({ command: 'dislikeTrack' });
-        });
-    }
-    
-    if (toggleMuteBtn) {
-        toggleMuteBtn.addEventListener('click', () => {
-            sendValueToPlugin({ command: 'toggleMute' });
-        });
-    }
+    const connectionStatus = document.getElementById('connectionStatus');
+    const checkConnectionBtn = document.getElementById('checkConnectionBtn');
+    const debugPortInput = document.getElementById('debugPort');
+    const savePortBtn = document.getElementById('savePortBtn');
+    const portHint = document.getElementById('portHint');
     
     console.log('Элементы DOM:', {
-        connectionStatus,
-        checkConnectionBtn,
-        togglePlaybackBtn,
-        prevTrackBtn,
-        nextTrackBtn,
-        likeTrackBtn,
-        dislikeTrackBtn,
-        toggleMuteBtn
+        connectionStatus: !!connectionStatus,
+        checkConnectionBtn: !!checkConnectionBtn,
+        debugPortInput: !!debugPortInput,
+        savePortBtn: !!savePortBtn,
+        portHint: !!portHint
     });
+    
+    if (!connectionStatus || !checkConnectionBtn) {
+        console.error('Не удалось найти элементы DOM для статуса соединения');
+        return;
+    }
+    
+    console.log('Инициализация Property Inspector...');
+    console.log('Проверка соединения с Яндекс Музыкой...');
+    
+    if ($websocket && $websocket.readyState === 1) {
+        $websocket.getGlobalSettings();
+        
+        $websocket.sendToPlugin({ command: 'checkConnection' });
+    }
+    
+    checkConnectionBtn.addEventListener('click', () => {
+        console.log('Нажата кнопка проверки соединения');
+        connectionStatus.textContent = 'Проверка...';
+        connectionStatus.className = 'badge bg-warning';
+        console.log('Запрос проверки соединения...');
+        
+        if ($websocket && $websocket.readyState === 1) {
+            $websocket.sendToPlugin({ command: 'checkConnection' });
+        } else {
+            console.error('WebSocket не готов для отправки данных');
+            connectionStatus.textContent = 'Ошибка соединения';
+            connectionStatus.className = 'badge bg-danger';
+        }
+    });
+    
+    if (savePortBtn && debugPortInput) {
+        savePortBtn.addEventListener('click', () => {
+            console.log('Нажата кнопка сохранения порта');
+            const port = parseInt(debugPortInput.value);
+            if (isNaN(port) || port < 1 || port > 65535) {
+                console.error('Некорректный порт:', debugPortInput.value);
+                return;
+            }
+            
+            console.log(`Сохранение нового порта: ${port}...`);
+            
+            const settings = {
+                debugPort: port
+            };
+            
+            if ($websocket && $websocket.readyState === 1) {
+                $websocket.setGlobalSettings(settings);
+                $websocket.sendToPlugin({ command: 'changePort', port: port });
+                
+                connectionStatus.textContent = 'Переподключение...';
+                connectionStatus.className = 'badge bg-warning';
+            } else {
+                console.error('WebSocket не готов для отправки данных');
+            }
+        });
+    }
 }
 
 const $propEvent = {
     didReceiveGlobalSettings({ settings }) {
+        console.log('Получены глобальные настройки:', settings);
+        
+        const debugPortInput = document.getElementById('debugPort');
+        const portHint = document.getElementById('portHint');
+        
+        if (debugPortInput && settings && settings.debugPort) {
+            debugPortInput.value = settings.debugPort;
+            console.log(`Установлен порт из настроек: ${settings.debugPort}`);
+            
+            if (portHint) {
+                portHint.textContent = `Убедитесь, что Яндекс Музыка запущена с параметром --remote-debugging-port=${settings.debugPort}`;
+            }
+        }
     },
     didReceiveSettings(data) {
+        console.log('Получены настройки:', data);
     },
     sendToPropertyInspector(data) {
         console.log('Получены данные от плагина:', data);
-        addLog(`Получены данные от плагина: ${JSON.stringify(data)}`, 'info');
         
-        const connectionStatus = $('#connectionStatus');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const portHint = document.getElementById('portHint');
+        
         if (!connectionStatus) {
             console.error('Не удалось найти элемент статуса соединения');
-            addLog('Ошибка: Не удалось найти элемент статуса соединения', 'error');
             return;
         }
         
@@ -335,36 +335,35 @@ const $propEvent = {
             if (data.status === 'connected') {
                 connectionStatus.textContent = 'Подключено';
                 connectionStatus.className = 'badge bg-success';
-                addLog('✅ Соединение с Яндекс Музыкой установлено', 'info');
+                console.log('✅ Соединение с Яндекс Музыкой установлено');
             } else {
                 connectionStatus.textContent = 'Не подключено';
                 connectionStatus.className = 'badge bg-danger';
-                addLog('❌ Не удалось подключиться к Яндекс Музыке', 'error');
-                addLog('Убедитесь, что Яндекс Музыка запущена с параметром --remote-debugging-port=9222', 'warning');
+                console.log('❌ Не удалось подключиться к Яндекс Музыке');
+                
+                const debugPortInput = document.getElementById('debugPort');
+                const port = debugPortInput ? debugPortInput.value : '9222';
+                console.log(`Убедитесь, что Яндекс Музыка запущена с параметром --remote-debugging-port=${port}`);
             }
         }
         
-        if (data.command === 'trackInfo') {
-            if (data.trackInfo) {
-                addLog(`🎵 Трек: ${data.trackInfo.title} - ${data.trackInfo.artist}`, 'info');
-                addLog(`🖼️ Обложка: ${data.trackInfo.coverUrl}`, 'info');
-            } else {
-                addLog('❌ Не удалось получить информацию о треке', 'error');
+        if (data.command === 'portChanged') {
+            console.log(`✅ Порт изменен на ${data.port}`);
+            
+            if (portHint) {
+                portHint.textContent = `Убедитесь, что Яндекс Музыка запущена с параметром --remote-debugging-port=${data.port}`;
             }
-        }
-        
-        if (data.command === 'coverUpdate') {
-            if (data.success) {
-                addLog('🖼️ Обложка обновлена успешно', 'info');
-            } else {
-                addLog(`❌ Ошибка обновления обложки: ${data.message}`, 'error');
-            }
-        }
-        
-        if (data.command === 'log') {
-            addLog(data.message, data.type || 'info');
+            
+            setTimeout(() => {
+                if ($websocket && $websocket.readyState === 1) {
+                    $websocket.sendToPlugin({ command: 'checkConnection' });
+                }
+            }, 1000);
         }
     }
 };
 
-document.addEventListener('DOMContentLoaded', initUI);
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOMContentLoaded event fired');
+    setTimeout(initUI, 1000);
+});
