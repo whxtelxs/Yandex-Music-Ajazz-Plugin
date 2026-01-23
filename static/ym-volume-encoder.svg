@@ -1,0 +1,15 @@
+<svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="72" height="72" fill="#000000"/>
+  <!-- Speaker body -->
+  <path d="M24 28 L24 44 L32 44 L42 52 L42 20 L32 28 Z" 
+        stroke="white" stroke-width="2.5" fill="none" 
+        stroke-linejoin="round" stroke-linecap="round"/>
+  <!-- Sound wave 1 -->
+  <path d="M47 30 Q51 36 47 42" 
+        stroke="white" stroke-width="2.5" fill="none" 
+        stroke-linecap="round"/>
+  <!-- Sound wave 2 -->
+  <path d="M52 26 Q58 36 52 46" 
+        stroke="white" stroke-width="2.5" fill="none" 
+        stroke-linecap="round"/>
+</svg>

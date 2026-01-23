@@ -1,0 +1,17 @@
+<svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="72" height="72" fill="#000000"/>
+  <!-- Rewind arrows (left) -->
+  <path d="M28 26 L18 36 L28 46" 
+        stroke="white" stroke-width="2.5" fill="none" 
+        stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M38 26 L28 36 L38 46" 
+        stroke="white" stroke-width="2.5" fill="none" 
+        stroke-linejoin="round" stroke-linecap="round"/>
+  <!-- Forward arrows (right) -->
+  <path d="M44 26 L54 36 L44 46" 
+        stroke="white" stroke-width="2.5" fill="none" 
+        stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M34 26 L44 36 L34 46" 
+        stroke="white" stroke-width="2.5" fill="none" 
+        stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

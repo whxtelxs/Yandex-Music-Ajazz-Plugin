@@ -5,9 +5,9 @@ const yandexMusic = require('./utils/yandex-music');
 const plugin = new Plugins('demo');
 
 yandexMusic.connect().then(() => {
-  log.info('Инициализация CDP соединения выполнена при запуске плагина');
+    log.info('Инициализация CDP соединения выполнена при запуске плагина');
 }).catch(err => {
-  log.error('Ошибка при инициализации CDP соединения:', err);
+    log.error('Ошибка при инициализации CDP соединения:', err);
 });
 
 const buttonContexts = {
@@ -38,7 +38,7 @@ let trackInfoCheckInterval = null;
 
 plugin.didReceiveGlobalSettings = ({ payload: { settings } }) => {
     log.info('didReceiveGlobalSettings', settings);
-    
+
     if (settings && settings.debugPort) {
         const savedPort = parseInt(settings.debugPort);
         if (!isNaN(savedPort) && savedPort >= 1 && savedPort <= 65535) {
@@ -65,64 +65,64 @@ function sendLogToPropertyInspector(message, type = 'info') {
 async function downloadAndSetImageAsDataUrl(imageUrl) {
     try {
         sendLogToPropertyInspector(`Скачивание изображения с URL: ${imageUrl}`, 'info');
-        
+
         const https = require('https');
         const http = require('http');
-        
+
         return new Promise((resolve, reject) => {
             const client = imageUrl.startsWith('https:') ? https : http;
-            
+
             client.get(imageUrl, (response) => {
                 if (response.statusCode !== 200) {
                     sendLogToPropertyInspector(`HTTP ошибка при скачивании: ${response.statusCode}`, 'error');
                     reject(new Error(`HTTP ${response.statusCode}`));
                     return;
                 }
-                
+
                 const chunks = [];
                 let totalLength = 0;
-                
+
                 response.on('data', (chunk) => {
                     chunks.push(chunk);
                     totalLength += chunk.length;
                 });
-                
+
                 response.on('end', () => {
                     try {
                         const buffer = Buffer.concat(chunks, totalLength);
                         sendLogToPropertyInspector(`Изображение скачано, размер: ${buffer.length} байт`, 'info');
-                        
+
                         const contentType = response.headers['content-type'] || 'image/jpeg';
                         const base64Data = buffer.toString('base64');
                         const dataUrl = `data:${contentType};base64,${base64Data}`;
-                        
+
                         sendLogToPropertyInspector(`Создан data URL, длина: ${dataUrl.length} символов`, 'info');
-                        
+
                         buttonContexts.cover.forEach((context, index) => {
                             sendLogToPropertyInspector(`Установка data URL для кнопки ${index + 1}`, 'info');
                             plugin.setImage(context, dataUrl);
                         });
-                        
+
                         sendLogToPropertyInspector('✅ Изображение установлено через data URL', 'info');
                         resolve(dataUrl);
-                        
+
                     } catch (error) {
                         sendLogToPropertyInspector(`Ошибка при обработке изображения: ${error.message}`, 'error');
                         reject(error);
                     }
                 });
-                
+
                 response.on('error', (error) => {
                     sendLogToPropertyInspector(`Ошибка при скачивании: ${error.message}`, 'error');
                     reject(error);
                 });
-                
+
             }).on('error', (error) => {
                 sendLogToPropertyInspector(`Ошибка HTTP запроса: ${error.message}`, 'error');
                 reject(error);
             });
         });
-        
+
     } catch (error) {
         sendLogToPropertyInspector(`Ошибка в downloadAndSetImageAsDataUrl: ${error.message}`, 'error');
         log.error('Ошибка в downloadAndSetImageAsDataUrl:', error);
@@ -138,15 +138,15 @@ async function checkYandexMusicConnection() {
 async function checkPlaybackState() {
     try {
         if (buttonContexts.playPause.length === 0) return;
-        
+
         let client;
         try {
             client = await yandexMusic.getClient();
-            
+
             if (!client) return;
-            
+
             const { Runtime } = client;
-            
+
             const result = await Runtime.evaluate({
                 expression: `
                     (function() {
@@ -175,14 +175,14 @@ async function checkPlaybackState() {
                 `,
                 returnByValue: true
             });
-            
+
             if (result.result && result.result.value) {
                 const { isPlaying } = result.result.value;
-                
+
                 buttonContexts.playPause.forEach(context => {
                     plugin.setState(context, isPlaying ? 1 : 0);
                 });
-                
+
                 log.info('Состояние воспроизведения:', isPlaying ? 'Воспроизведение' : 'Пауза');
             }
         } catch (error) {
@@ -196,15 +196,15 @@ async function checkPlaybackState() {
 async function checkLikeState() {
     try {
         if (buttonContexts.like.length === 0) return;
-        
+
         let client;
         try {
             client = await yandexMusic.getClient();
-            
+
             if (!client) return;
-            
+
             const { Runtime } = client;
-            
+
             const result = await Runtime.evaluate({
                 expression: `
                     (function() {
@@ -258,18 +258,18 @@ async function checkLikeState() {
                 `,
                 returnByValue: true
             });
-            
+
             if (result.result && result.result.value) {
                 const { isLiked, error } = result.result.value;
-                
+
                 if (error) {
                     log.error('Ошибка в JavaScript при проверке лайка:', error);
                 }
-                
+
                 buttonContexts.like.forEach(context => {
                     plugin.setState(context, isLiked ? 1 : 0);
                 });
-                
+
                 log.info('Состояние лайка:', isLiked ? 'Лайкнут' : 'Не лайкнут');
             }
         } catch (error) {
@@ -283,15 +283,15 @@ async function checkLikeState() {
 async function checkMuteState() {
     try {
         if (buttonContexts.mute.length === 0) return;
-        
+
         let client;
         try {
             client = await yandexMusic.getClient();
-            
+
             if (!client) return;
-            
+
             const { Runtime } = client;
-            
+
             const result = await Runtime.evaluate({
                 expression: `
                     (function() {
@@ -312,14 +312,14 @@ async function checkMuteState() {
                 `,
                 returnByValue: true
             });
-            
+
             if (result.result && result.result.value) {
                 const { isMuted } = result.result.value;
-                
+
                 buttonContexts.mute.forEach(context => {
                     plugin.setState(context, isMuted ? 1 : 0);
                 });
-                
+
                 log.info('Состояние звука:', isMuted ? 'Выключен' : 'Включен');
             }
         } catch (error) {
@@ -337,10 +337,10 @@ async function restoreCoverForContext(context) {
             await checkCoverState();
             return;
         }
-        
+
         sendLogToPropertyInspector(`Восстановление обложки для контекста ${context}`, 'info');
         sendLogToPropertyInspector(`Кэшированный трек: ${lastTrackInfo.title} - ${lastTrackInfo.artist}`, 'info');
-        
+
         try {
             await downloadAndSetImageForContext(lastTrackInfo.coverUrl, context);
             sendLogToPropertyInspector(`✅ Обложка восстановлена для контекста ${context}`, 'info');
@@ -358,59 +358,59 @@ async function restoreCoverForContext(context) {
 async function downloadAndSetImageForContext(imageUrl, context) {
     try {
         sendLogToPropertyInspector(`Скачивание изображения для контекста ${context}`, 'info');
-        
+
         const https = require('https');
         const http = require('http');
-        
+
         return new Promise((resolve, reject) => {
             const client = imageUrl.startsWith('https:') ? https : http;
-            
+
             client.get(imageUrl, (response) => {
                 if (response.statusCode !== 200) {
                     sendLogToPropertyInspector(`HTTP ошибка при скачивании: ${response.statusCode}`, 'error');
                     reject(new Error(`HTTP ${response.statusCode}`));
                     return;
                 }
-                
+
                 const chunks = [];
                 let totalLength = 0;
-                
+
                 response.on('data', (chunk) => {
                     chunks.push(chunk);
                     totalLength += chunk.length;
                 });
-                
+
                 response.on('end', () => {
                     try {
                         const buffer = Buffer.concat(chunks, totalLength);
                         sendLogToPropertyInspector(`Изображение скачано для контекста ${context}, размер: ${buffer.length} байт`, 'info');
-                        
+
                         const contentType = response.headers['content-type'] || 'image/jpeg';
                         const base64Data = buffer.toString('base64');
                         const dataUrl = `data:${contentType};base64,${base64Data}`;
-                        
+
                         sendLogToPropertyInspector(`Установка изображения для контекста ${context}`, 'info');
                         plugin.setImage(context, dataUrl);
-                        
+
                         resolve(dataUrl);
-                        
+
                     } catch (error) {
                         sendLogToPropertyInspector(`Ошибка при обработке изображения для контекста ${context}: ${error.message}`, 'error');
                         reject(error);
                     }
                 });
-                
+
                 response.on('error', (error) => {
                     sendLogToPropertyInspector(`Ошибка при скачивании для контекста ${context}: ${error.message}`, 'error');
                     reject(error);
                 });
-                
+
             }).on('error', (error) => {
                 sendLogToPropertyInspector(`Ошибка HTTP запроса для контекста ${context}: ${error.message}`, 'error');
                 reject(error);
             });
         });
-        
+
     } catch (error) {
         sendLogToPropertyInspector(`Ошибка в downloadAndSetImageForContext: ${error.message}`, 'error');
         log.error('Ошибка в downloadAndSetImageForContext:', error);
@@ -437,18 +437,18 @@ function getScrollingText(fullText, position, maxLength) {
     if (fullText.length <= maxLength) {
         return fullText;
     }
-    
+
     const padding = '   ';
     const extendedText = fullText + padding;
     const totalLength = extendedText.length;
-    
+
     let startPos = position % totalLength;
     let result = '';
-    
+
     for (let i = 0; i < maxLength; i++) {
         result += extendedText[(startPos + i) % totalLength];
     }
-    
+
     return result;
 }
 
@@ -457,25 +457,25 @@ async function checkTrackInfoState() {
         if (buttonContexts.trackInfo.length === 0) {
             return;
         }
-        
+
         const trackInfo = await yandexMusic.getTrackInfo();
         if (trackInfo && trackInfo.title && trackInfo.artist) {
             const fullText = `${trackInfo.artist} - ${trackInfo.title}`;
-            
+
             if (scrollingText.text !== fullText) {
                 scrollingText.text = fullText;
                 scrollingText.position = 0;
                 scrollingText.frameCounter = 0;
                 sendLogToPropertyInspector(`Новый трек для бегущей строки: ${fullText}`, 'info');
             }
-            
+
             const currentPosition = Math.floor(scrollingText.position);
             const displayText = getScrollingText(scrollingText.text, currentPosition, scrollingText.maxLength);
-            
+
             buttonContexts.trackInfo.forEach(context => {
                 plugin.setTitle(context, displayText);
             });
-            
+
             scrollingText.frameCounter++;
             scrollingText.position += scrollingText.speed;
         } else {
@@ -492,23 +492,23 @@ async function checkTrackInfoState() {
 async function checkTimeState() {
     try {
         const hasTimeButtons = buttonContexts.timeTotal.length > 0;
-        
+
         if (!hasTimeButtons) {
             return;
         }
-        
+
         const timeInfo = await yandexMusic.getTrackTime();
         if (timeInfo && timeInfo.currentTime && timeInfo.totalTime) {
             const timeData = {
                 current: timeInfo.currentTime,
                 total: timeInfo.totalTime
             };
-            
+
             if (JSON.stringify(timeData) !== JSON.stringify(lastTimeInfo)) {
                 buttonContexts.timeTotal.forEach(context => {
                     plugin.setTitle(context, `${timeData.current}\n${timeData.total}`);
                 });
-                
+
                 lastTimeInfo = timeData;
                 sendLogToPropertyInspector(`Время синхронизировано: ${timeData.current}/${timeData.total}`, 'info');
             }
@@ -529,34 +529,34 @@ async function checkCoverState() {
         if (buttonContexts.cover.length === 0) {
             return;
         }
-        
+
         sendLogToPropertyInspector(`Проверка обложки для ${buttonContexts.cover.length} кнопок`, 'info');
-        
+
         sendLogToPropertyInspector('Получение информации о треке...', 'info');
         const trackInfo = await yandexMusic.getTrackInfo();
-        
+
         if (trackInfo && trackInfo.coverUrl) {
             const trackId = `${trackInfo.title}-${trackInfo.artist}`;
             const lastTrackId = lastTrackInfo ? `${lastTrackInfo.title}-${lastTrackInfo.artist}` : null;
-            
+
             if (trackId === lastTrackId && lastTrackInfo && lastTrackInfo.coverUrl === trackInfo.coverUrl) {
                 return;
             }
-            
+
             sendLogToPropertyInspector(`Найден новый трек: ${trackInfo.title} - ${trackInfo.artist}`, 'info');
             sendLogToPropertyInspector(`URL обложки: ${trackInfo.coverUrl}`, 'info');
             if (trackInfo.originalCoverUrl && trackInfo.originalCoverUrl !== trackInfo.coverUrl) {
                 sendLogToPropertyInspector(`Оригинальный URL: ${trackInfo.originalCoverUrl}`, 'info');
             }
-            
+
             try {
                 sendLogToPropertyInspector('Скачивание и установка изображения...', 'info');
                 await downloadAndSetImageAsDataUrl(trackInfo.coverUrl);
-                
+
                 lastTrackInfo = trackInfo;
                 sendLogToPropertyInspector(`✅ Обложка обновлена для трека: ${trackInfo.title}`, 'info');
                 log.info('Обложка обновлена:', trackInfo.title, 'от', trackInfo.artist);
-                
+
             } catch (error) {
                 sendLogToPropertyInspector(`Ошибка при установке изображения: ${error.message}`, 'error');
                 log.error('Ошибка при установке изображения:', error);
@@ -564,7 +564,7 @@ async function checkCoverState() {
         } else {
             sendLogToPropertyInspector('Не удалось получить информацию о треке или обложку', 'error');
             log.error('Не удалось получить информацию о треке');
-            
+
             if (lastTrackInfo) {
                 sendLogToPropertyInspector('Сброс кэша трека из-за ошибки', 'info');
                 lastTrackInfo = null;
@@ -583,14 +583,14 @@ function startStateChecks() {
     if (coverCheckInterval) clearInterval(coverCheckInterval);
     if (timeCheckInterval) clearInterval(timeCheckInterval);
     if (trackInfoCheckInterval) clearInterval(trackInfoCheckInterval);
-    
+
     playbackCheckInterval = setInterval(checkPlaybackState, 500);
     likeCheckInterval = setInterval(checkLikeState, 1000);
     muteCheckInterval = setInterval(checkMuteState, 1000);
     coverCheckInterval = setInterval(checkCoverState, 3000);
     timeCheckInterval = setInterval(checkTimeState, 1000);
     trackInfoCheckInterval = setInterval(checkTrackInfoState, 500);
-    
+
     log.info('Запущены проверки состояния кнопок с оптимизированными интервалами');
 }
 
@@ -633,8 +633,8 @@ plugin.demo = new Actions({
             }
         });
     },
-    dialDown({ context, payload }) {},
-    dialRotate({ context, payload }) {}
+    dialDown({ context, payload }) { },
+    dialRotate({ context, payload }) { }
 });
 
 plugin["ym-play-pause"] = new Actions({
@@ -643,11 +643,11 @@ plugin["ym-play-pause"] = new Actions({
     },
     async _willAppear({ context, payload }) {
         log.info("YM Play/Pause появился:", context);
-        
+
         if (!buttonContexts.playPause.includes(context)) {
             buttonContexts.playPause.push(context);
         }
-        
+
         await checkPlaybackState();
     },
     _willDisappear({ context }) {
@@ -711,11 +711,11 @@ plugin["ym-like"] = new Actions({
     },
     async _willAppear({ context, payload }) {
         log.info("YM Like появился:", context);
-        
+
         if (!buttonContexts.like.includes(context)) {
             buttonContexts.like.push(context);
         }
-        
+
         await checkLikeState();
     },
     _willDisappear({ context }) {
@@ -761,11 +761,11 @@ plugin["ym-mute"] = new Actions({
     },
     async _willAppear({ context, payload }) {
         log.info("YM Mute появился:", context);
-        
+
         if (!buttonContexts.mute.includes(context)) {
             buttonContexts.mute.push(context);
         }
-        
+
         await checkMuteState();
     },
     _willDisappear({ context }) {
@@ -792,25 +792,25 @@ plugin["ym-cover"] = new Actions({
     async _willAppear({ context, payload }) {
         log.info("YM Cover появился:", context);
         sendLogToPropertyInspector(`Инициализация кнопки обложки: ${context}`, 'info');
-        
+
         const isNewButton = !buttonContexts.cover.includes(context);
-        
+
         if (isNewButton) {
             buttonContexts.cover.push(context);
             sendLogToPropertyInspector(`Добавлена кнопка обложки. Всего кнопок: ${buttonContexts.cover.length}`, 'info');
         } else {
             sendLogToPropertyInspector(`Кнопка обложки возвращена на страницу: ${context}`, 'info');
         }
-        
+
         sendLogToPropertyInspector('✅ Соединение установлено, загружаем обложку...', 'info');
-        
+
         if (isNewButton) {
             sendLogToPropertyInspector('Сброс кэша трека для новой кнопки', 'info');
             lastTrackInfo = null;
         } else {
             sendLogToPropertyInspector('Восстановление обложки для существующей кнопки...', 'info');
         }
-        
+
         sendLogToPropertyInspector('Немедленная загрузка обложки...', 'info');
         await checkCoverState();
     },
@@ -831,9 +831,9 @@ plugin["ym-track-info"] = new Actions({
     async _willAppear({ context, payload }) {
         log.info("YM Track Info появился:", context);
         sendLogToPropertyInspector(`Инициализация кнопки информации о треке: ${context}`, 'info');
-        
+
         const isNewButton = !buttonContexts.trackInfo.includes(context);
-        
+
         if (isNewButton) {
             buttonContexts.trackInfo.push(context);
             sendLogToPropertyInspector(`Добавлена кнопка информации о треке. Всего кнопок: ${buttonContexts.trackInfo.length}`, 'info');
@@ -841,7 +841,7 @@ plugin["ym-track-info"] = new Actions({
             scrollingText.position = 0;
             scrollingText.frameCounter = 0;
         }
-        
+
         plugin.setTitle(context, 'Загрузка...');
         await checkTrackInfoState();
     },
@@ -862,15 +862,15 @@ plugin["ym-time-total"] = new Actions({
     async _willAppear({ context, payload }) {
         log.info("YM Time Total появился:", context);
         sendLogToPropertyInspector(`Инициализация кнопки времени (общее): ${context}`, 'info');
-        
+
         const isNewButton = !buttonContexts.timeTotal.includes(context);
-        
+
         if (isNewButton) {
             buttonContexts.timeTotal.push(context);
             sendLogToPropertyInspector(`Добавлена кнопка времени (общее). Всего кнопок: ${buttonContexts.timeTotal.length}`, 'info');
             lastTimeInfo = null;
         }
-        
+
         plugin.setTitle(context, '0:00\n0:00');
         await checkTimeState();
     },
@@ -886,18 +886,169 @@ plugin["ym-time-total"] = new Actions({
     }
 });
 
+// Энкодер управления громкостью
+plugin["ym-volume-encoder"] = new Actions({
+    default: {},
+    async _willAppear({ context, payload }) {
+        log.info("YM Volume Encoder появился:", context);
+
+        // Показываем текущую громкость
+        const volume = await yandexMusic.getVolume();
+        if (volume !== null) {
+            plugin.setTitle(context, `${Math.round(volume)}%`);
+        } else {
+            plugin.setTitle(context, 'VOL');
+        }
+    },
+    _willDisappear({ context }) {
+        log.info("YM Volume Encoder исчез:", context);
+    },
+    // Обработка нажатия кнопки (Keypad mode)
+    async keyUp({ context, payload }) {
+        log.info("YM Volume Encoder keyUp:", context);
+        try {
+            const result = await yandexMusic.toggleMute();
+            if (result) {
+                // Переключаем состояние иконки (0 = звук вкл, 1 = muted)
+                const currentState = payload?.state || 0;
+                plugin.setState(context, currentState === 0 ? 1 : 0);
+            } else {
+                plugin.showAlert(context);
+            }
+        } catch (error) {
+            log.error('Ошибка при переключении звука через кнопку энкодера:', error);
+            plugin.showAlert(context);
+        }
+    },
+    // Обработка нажатия энкодера (Knob mode) - mute/unmute
+    async dialDown({ context, payload }) {
+        log.info("YM Volume Encoder dialDown:", context, JSON.stringify(payload));
+        try {
+            const result = await yandexMusic.toggleMute();
+            if (result) {
+                // Переключаем состояние иконки (0 = звук вкл, 1 = muted)
+                const currentState = payload?.state || 0;
+                plugin.setState(context, currentState === 0 ? 1 : 0);
+            } else {
+                plugin.showAlert(context);
+            }
+        } catch (error) {
+            log.error('Ошибка при переключении звука через энкодер:', error);
+            plugin.showAlert(context);
+        }
+    },
+    // Обработка вращения энкодера - изменение громкости
+    async dialRotate({ context, payload }) {
+        log.info("YM Volume Encoder dialRotate:", context, JSON.stringify(payload));
+
+        // payload.ticks содержит количество тиков (+ или -)
+        const ticks = payload?.ticks || 0;
+        log.info(`Тики вращения: ${ticks}`);
+
+        if (ticks === 0) {
+            log.info("Тики равны 0, пропускаем");
+            return;
+        }
+
+        const volumeStep = 5; // Шаг изменения громкости в процентах
+        const delta = ticks * volumeStep;
+
+        try {
+            log.info(`Изменяем громкость на ${delta}%`);
+            const result = await yandexMusic.changeVolume(delta);
+            if (result) {
+                // Обновляем отображение громкости
+                const newVolume = await yandexMusic.getVolume();
+                if (newVolume !== null) {
+                    plugin.setTitle(context, `${Math.round(newVolume)}%`);
+                    log.info(`Новая громкость: ${Math.round(newVolume)}%`);
+                }
+            } else {
+                log.error("changeVolume вернул false");
+                plugin.showAlert(context);
+            }
+        } catch (error) {
+            log.error('Ошибка при изменении громкости через энкодер:', error);
+            plugin.showAlert(context);
+        }
+    }
+});
+
+// Энкодер перемотки трека
+plugin["ym-seek-encoder"] = new Actions({
+    default: {},
+    async _willAppear({ context, payload }) {
+        log.info("YM Seek Encoder появился:", context);
+        plugin.setTitle(context, 'SEEK');
+    },
+    _willDisappear({ context }) {
+        log.info("YM Seek Encoder исчез:", context);
+    },
+    // Обработка нажатия кнопки (Keypad mode)
+    async keyUp({ context, payload }) {
+        log.info("YM Seek Encoder keyUp:", context);
+        try {
+            const result = await yandexMusic.togglePlayback();
+            if (result) {
+                // Переключаем состояние иконки (0 = playing, 1 = paused)
+                const currentState = payload?.state || 0;
+                plugin.setState(context, currentState === 0 ? 1 : 0);
+            } else {
+                plugin.showAlert(context);
+            }
+        } catch (error) {
+            log.error('Ошибка при переключении воспроизведения через кнопку энкодера:', error);
+            plugin.showAlert(context);
+        }
+    },
+    // Обработка нажатия энкодера (Knob mode) - play/pause
+    async dialDown({ context, payload }) {
+        log.info("YM Seek Encoder dialDown:", context, JSON.stringify(payload));
+        try {
+            const result = await yandexMusic.togglePlayback();
+            if (result) {
+                // Переключаем состояние иконки (0 = playing, 1 = paused)
+                const currentState = payload?.state || 0;
+                plugin.setState(context, currentState === 0 ? 1 : 0);
+            } else {
+                plugin.showAlert(context);
+            }
+        } catch (error) {
+            log.error('Ошибка при переключении воспроизведения через энкодер:', error);
+            plugin.showAlert(context);
+        }
+    },
+    // Обработка вращения энкодера - перемотка
+    async dialRotate({ context, payload }) {
+        log.info("YM Seek Encoder dialRotate:", context, JSON.stringify(payload));
+
+        // payload.ticks содержит количество тиков (+ или -)
+        const ticks = payload?.ticks || 0;
+
+        try {
+            const result = await yandexMusic.seekRelative(ticks);
+            if (!result) {
+                plugin.showAlert(context);
+            }
+        } catch (error) {
+            log.error('Ошибка при перемотке через энкодер:', error);
+            plugin.showAlert(context);
+        }
+    }
+});
+
 plugin.ws.on('message', (data) => {
     try {
         const message = JSON.parse(data.toString());
         log.info('Получено сообщение от StreamDeck:', message.event, message.action);
-        
+
         if (message.event === 'sendToPlugin' && message.payload && message.payload.command) {
             log.info('Получена команда от Property Inspector:', message.payload.command, message.payload);
-            
+
             const { command } = message.payload;
             const context = message.context;
             const action = message.action;
-            
+
             switch (command) {
                 case 'checkConnection':
                     log.info('Выполняем проверку соединения');
@@ -916,17 +1067,17 @@ plugin.ws.on('message', (data) => {
                             log.error('Некорректный порт:', message.payload.port);
                             return;
                         }
-                        
+
                         log.info(`Изменение порта на ${newPort}...`);
-                        
+
                         const settings = {
                             debugPort: newPort
                         };
                         plugin.setGlobalSettings(settings);
-                        
+
                         yandexMusic.setPort(newPort).then(success => {
                             log.info(`Результат изменения порта: ${success ? 'успешно' : 'ошибка'}`);
-                            
+
                             plugin.sendToPropertyInspector({
                                 command: 'portChanged',
                                 port: newPort,
@@ -965,6 +1116,27 @@ plugin.ws.on('message', (data) => {
                         log.info('Результат переключения звука:', result);
                     });
                     break;
+                case 'changeVolume':
+                    if (typeof message.payload.delta === 'number') {
+                        yandexMusic.changeVolume(message.payload.delta).then(result => {
+                            log.info('Результат изменения громкости:', result);
+                        });
+                    }
+                    break;
+                case 'setVolume':
+                    if (typeof message.payload.volume === 'number') {
+                        yandexMusic.setVolume(message.payload.volume).then(result => {
+                            log.info('Результат установки громкости:', result);
+                        });
+                    }
+                    break;
+                case 'seekRelative':
+                    if (typeof message.payload.ticks === 'number') {
+                        yandexMusic.seekRelative(message.payload.ticks).then(result => {
+                            log.info('Результат перемотки:', result);
+                        });
+                    }
+                    break;
             }
         }
     } catch (error) {
@@ -972,21 +1144,21 @@ plugin.ws.on('message', (data) => {
     }
 });
 
-plugin.sendToPropertyInspector = function(payload, context, action) {
+plugin.sendToPropertyInspector = function (payload, context, action) {
     log.info('Отправка сообщения в Property Inspector:', payload);
-    
+
     if (!action) {
         action = Actions.actions[context];
-        
+
         if (!action) {
             action = 'com.whxtelxs.streamdock.yandexmusicajazz.demo';
         }
     }
-    
+
     this.ws.send(JSON.stringify({
         action: action,
         context: context || Actions.currentContext,
-        payload, 
+        payload,
         event: "sendToPropertyInspector"
     }));
 };

@@ -19,15 +19,15 @@ class YandexMusicController {
     }
 
     log.info(`Изменение порта с ${this.port} на ${newPort}`);
-    
+
     await this.disconnect();
-    
+
     this.port = newPort;
-    
+
     this.connected = false;
     this.connectionPromise = null;
     this.reconnectAttempts = 0;
-    
+
     try {
       await this.connect();
       log.info(`Успешное подключение к новому порту ${newPort}`);
@@ -54,15 +54,15 @@ class YandexMusicController {
 
         log.info('Создание нового CDP соединения на порту', this.port);
         this.client = await CDP({ port: this.port });
-        
+
         await Promise.all([
           this.client.Page.enable(),
           this.client.Runtime.enable()
         ]);
-        
+
         this.connected = true;
         this.reconnectAttempts = 0;
-        
+
         this.client.on('disconnect', () => {
           log.error('CDP соединение разорвано, попытка переподключения...');
           this.connected = false;
@@ -70,21 +70,21 @@ class YandexMusicController {
           this.connectionPromise = null;
           this.reconnect();
         });
-        
+
         log.info('CDP соединение успешно установлено');
         resolve(this.client);
       } catch (err) {
         this.connected = false;
         this.client = null;
         this.connectionPromise = null;
-        
+
         if (err.message.includes('connect ECONNREFUSED')) {
           log.error('Не удалось подключиться к приложению Яндекс Музыка на порту', this.port);
           log.error('Убедитесь, что приложение запущено с параметром --remote-debugging-port=' + this.port);
         } else {
           log.error('Ошибка при создании CDP-клиента:', err);
         }
-        
+
         reject(err);
       }
     });
@@ -97,10 +97,10 @@ class YandexMusicController {
       log.error(`Превышено максимальное количество попыток переподключения (${this.maxReconnectAttempts})`);
       return;
     }
-    
+
     this.reconnectAttempts++;
     log.info(`Попытка переподключения ${this.reconnectAttempts}/${this.maxReconnectAttempts}...`);
-    
+
     setTimeout(async () => {
       try {
         await this.connect();
@@ -150,17 +150,17 @@ class YandexMusicController {
   async togglePlayback() {
     try {
       log.info('Подключение к приложению Яндекс.Музыка');
-      
+
       const client = await this.getClient();
       if (!client) {
         log.error('Не удалось получить CDP клиент');
         return false;
       }
-      
+
       const { Runtime } = client;
-      
+
       log.info('Определение состояния воспроизведения...');
-      
+
       const result = await Runtime.evaluate({
         expression: `
           (function() {
@@ -225,21 +225,21 @@ class YandexMusicController {
         awaitPromise: true,
         returnByValue: true
       });
-      
+
       if (result.result && result.result.value) {
         const value = result.result.value;
-        
+
         if (value.success) {
           log.info(value.message);
           log.info(`Трек был ${value.wasPlaying ? 'в состоянии воспроизведения' : 'на паузе'}`);
           return true;
         } else {
           log.error('Не удалось переключить воспроизведение:', value.message);
-          
+
           if (value.error) {
             log.error('Детали ошибки:', value.error);
           }
-          
+
           return false;
         }
       } else {
@@ -255,17 +255,17 @@ class YandexMusicController {
   async executeAction(buttonId, actionDescription) {
     try {
       log.info('Подключение к приложению Яндекс.Музыка');
-      
+
       const client = await this.getClient();
       if (!client) {
         log.error('Не удалось получить CDP клиент');
         return false;
       }
-      
+
       const { Runtime } = client;
-      
+
       log.info(`Выполнение действия: ${actionDescription}...`);
-      
+
       const result = await Runtime.evaluate({
         expression: `
           (function() {
@@ -324,20 +324,20 @@ class YandexMusicController {
         awaitPromise: true,
         returnByValue: true
       });
-      
+
       if (result.result && result.result.value) {
         const value = result.result.value;
-        
+
         if (value.success) {
           log.info(`${actionDescription} выполнено успешно`);
           return true;
         } else {
           log.error(`Не удалось выполнить действие: ${actionDescription}`, value.message);
-          
+
           if (value.error) {
             log.error('Детали ошибки:', value.error);
           }
-          
+
           return false;
         }
       } else {
@@ -353,18 +353,18 @@ class YandexMusicController {
   async getTrackInfo() {
     try {
       log.info('Подключение к приложению Яндекс.Музыка');
-      
+
       const client = await this.getClient();
       if (!client) {
         log.error('Не удалось получить CDP клиент');
         return null;
       }
-      
+
       const { Runtime } = client;
-      
+
       log.info('Получение информации о треке...');
       log.info('Выполнение JavaScript кода для поиска элементов трека...');
-      
+
       const result = await Runtime.evaluate({
         expression: `
           (function() {
@@ -424,10 +424,10 @@ class YandexMusicController {
         awaitPromise: true,
         returnByValue: true
       });
-      
+
       if (result.result && result.result.value) {
         const value = result.result.value;
-        
+
         if (value.success) {
           log.info('Информация о треке получена успешно:', value.title, 'от', value.artist);
           log.info('URL обложки:', value.coverUrl);
@@ -439,11 +439,11 @@ class YandexMusicController {
         } else {
           log.error('Не удалось получить информацию о треке:', value.message);
           log.error('Проверьте, что трек воспроизводится в Яндекс Музыке');
-          
+
           if (value.error) {
             log.error('Детали ошибки:', value.error);
           }
-          
+
           return null;
         }
       } else {
@@ -459,17 +459,17 @@ class YandexMusicController {
   async getTrackTime() {
     try {
       log.info('Подключение к приложению Яндекс.Музыка');
-      
+
       const client = await this.getClient();
       if (!client) {
         log.error('Не удалось получить CDP клиент');
         return null;
       }
-      
+
       const { Runtime } = client;
-      
+
       log.info('Получение информации о времени трека...');
-      
+
       const result = await Runtime.evaluate({
         expression: `
           (function() {
@@ -527,10 +527,10 @@ class YandexMusicController {
         awaitPromise: true,
         returnByValue: true
       });
-      
+
       if (result.result && result.result.value) {
         const value = result.result.value;
-        
+
         if (value.success) {
           log.info('Информация о времени трека получена успешно:', value.currentTime, '/', value.totalTime);
           return {
@@ -542,11 +542,11 @@ class YandexMusicController {
           };
         } else {
           log.error('Не удалось получить информацию о времени трека:', value.message);
-          
+
           if (value.error) {
             log.error('Детали ошибки:', value.error);
           }
-          
+
           return null;
         }
       } else {
@@ -562,17 +562,17 @@ class YandexMusicController {
   async toggleMute() {
     try {
       log.info('Подключение к приложению Яндекс.Музыка');
-      
+
       const client = await this.getClient();
       if (!client) {
         log.error('Не удалось получить CDP клиент');
         return false;
       }
-      
+
       const { Runtime } = client;
-      
+
       log.info('Определение состояния звука и переключение...');
-      
+
       const result = await Runtime.evaluate({
         expression: `
           (function() {
@@ -628,21 +628,21 @@ class YandexMusicController {
         awaitPromise: true,
         returnByValue: true
       });
-      
+
       if (result.result && result.result.value) {
         const value = result.result.value;
-        
+
         if (value.success) {
           log.info(value.message);
           log.info(`Звук был ${value.wasMuted ? 'выключен' : 'включен'}`);
           return true;
         } else {
           log.error('Не удалось переключить звук:', value.message);
-          
+
           if (value.error) {
             log.error('Детали ошибки:', value.error);
           }
-          
+
           return false;
         }
       } else {
@@ -654,7 +654,349 @@ class YandexMusicController {
       return false;
     }
   }
-  
+
+  async getVolume() {
+    try {
+      const client = await this.getClient();
+      if (!client) {
+        log.error('Не удалось получить CDP клиент');
+        return null;
+      }
+
+      const { Runtime } = client;
+
+      const result = await Runtime.evaluate({
+        expression: `
+          (function() {
+            try {
+              // Способ 1: Ищем слайдер по data-test-id
+              let volumeSlider = document.querySelector('[data-test-id="VOLUME_SLIDER"]');
+              
+              // Способ 2: Ищем через контейнер кнопки громкости
+              if (!volumeSlider) {
+                const muteButton = document.querySelector("button.ChangeVolume_button__4HLEr[data-test-id='CHANGE_VOLUME_BUTTON']");
+                if (muteButton) {
+                  // Слайдер должен быть рядом с кнопкой
+                  const container = muteButton.closest('.ChangeVolume_root__lNUWO') || muteButton.parentElement;
+                  if (container) {
+                    volumeSlider = container.querySelector('input[type="range"]');
+                  }
+                }
+              }
+              
+              // Способ 3: Ищем любой input range в области громкости
+              if (!volumeSlider) {
+                const volumeContainer = document.querySelector('.ChangeVolume_root__lNUWO');
+                if (volumeContainer) {
+                  volumeSlider = volumeContainer.querySelector('input[type="range"]');
+                }
+              }
+              
+              // Способ 4: Ищем через класс слайдера
+              if (!volumeSlider) {
+                volumeSlider = document.querySelector('input.ChangeVolume_slider__wpxLs');
+              }
+              
+              // Способ 5: Глобальный поиск слайдера громкости
+              if (!volumeSlider) {
+                const allSliders = document.querySelectorAll('input[type="range"]');
+                for (const slider of allSliders) {
+                  const parent = slider.closest('.ChangeVolume_root__lNUWO');
+                  if (parent) {
+                    volumeSlider = slider;
+                    break;
+                  }
+                }
+              }
+              
+              if (volumeSlider) {
+                const value = parseFloat(volumeSlider.value) || 0;
+                const max = parseFloat(volumeSlider.max) || 1;
+                const percentage = (value / max) * 100;
+                console.log('Найден слайдер громкости:', { value, max, percentage });
+                return { 
+                  success: true, 
+                  volume: percentage,
+                  rawValue: value,
+                  max: max
+                };
+              }
+              
+              console.log('Слайдер громкости не найден ни одним из способов');
+              return { success: false, message: 'Слайдер громкости не найден' };
+            } catch (err) {
+              console.error('Ошибка getVolume:', err);
+              return { success: false, message: err.message };
+            }
+          })()
+        `,
+        returnByValue: true
+      });
+
+      if (result.result && result.result.value && result.result.value.success) {
+        log.info(`Получена громкость: ${result.result.value.volume}% (raw: ${result.result.value.rawValue}, max: ${result.result.value.max})`);
+        return result.result.value.volume;
+      }
+      log.error('Не удалось получить громкость:', result.result?.value?.message);
+      return null;
+    } catch (err) {
+      log.error('Ошибка при получении громкости:', err);
+      return null;
+    }
+  }
+
+  async setVolume(volumePercent) {
+    try {
+      const client = await this.getClient();
+      if (!client) {
+        log.error('Не удалось получить CDP клиент');
+        return false;
+      }
+
+      const { Runtime } = client;
+      const clampedPercent = Math.max(0, Math.min(100, volumePercent));
+
+      log.info(`Установка громкости: ${clampedPercent}%`);
+
+      const result = await Runtime.evaluate({
+        expression: `
+          (function() {
+            try {
+              // Способ 1: Ищем слайдер по data-test-id
+              let volumeSlider = document.querySelector('[data-test-id="VOLUME_SLIDER"]');
+              
+              // Способ 2: Ищем через контейнер кнопки громкости
+              if (!volumeSlider) {
+                const muteButton = document.querySelector("button.ChangeVolume_button__4HLEr[data-test-id='CHANGE_VOLUME_BUTTON']");
+                if (muteButton) {
+                  const container = muteButton.closest('.ChangeVolume_root__lNUWO') || muteButton.parentElement;
+                  if (container) {
+                    volumeSlider = container.querySelector('input[type="range"]');
+                  }
+                }
+              }
+              
+              // Способ 3: Ищем любой input range в области громкости
+              if (!volumeSlider) {
+                const volumeContainer = document.querySelector('.ChangeVolume_root__lNUWO');
+                if (volumeContainer) {
+                  volumeSlider = volumeContainer.querySelector('input[type="range"]');
+                }
+              }
+              
+              // Способ 4: Ищем через класс слайдера
+              if (!volumeSlider) {
+                volumeSlider = document.querySelector('input.ChangeVolume_slider__wpxLs');
+              }
+              
+              // Способ 5: Глобальный поиск слайдера громкости
+              if (!volumeSlider) {
+                const allSliders = document.querySelectorAll('input[type="range"]');
+                for (const slider of allSliders) {
+                  const parent = slider.closest('.ChangeVolume_root__lNUWO');
+                  if (parent) {
+                    volumeSlider = slider;
+                    break;
+                  }
+                }
+              }
+              
+              if (volumeSlider) {
+                const max = parseFloat(volumeSlider.max) || 1;
+                const newValue = (${clampedPercent} / 100) * max;
+                
+                console.log('Установка громкости: percent=${clampedPercent}, max=' + max + ', newValue=' + newValue);
+                
+                // Прямое изменение через native setter
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                nativeInputValueSetter.call(volumeSlider, newValue);
+                
+                // InputEvent
+                const inputEvent = new InputEvent('input', {
+                  bubbles: true,
+                  cancelable: true,
+                  inputType: 'insertText',
+                  data: String(newValue)
+                });
+                volumeSlider.dispatchEvent(inputEvent);
+                
+                // Change event
+                const changeEvent = new Event('change', { bubbles: true });
+                volumeSlider.dispatchEvent(changeEvent);
+                
+                const actualValue = parseFloat(volumeSlider.value);
+                console.log('Громкость после установки:', actualValue);
+                
+                return { success: true, volume: ${clampedPercent}, rawValue: newValue, actualValue: actualValue };
+              }
+              console.log('Слайдер громкости не найден');
+              return { success: false, message: 'Слайдер громкости не найден' };
+            } catch (err) {
+              console.error('Ошибка setVolume:', err);
+              return { success: false, message: err.message };
+            }
+          })()
+        `,
+        returnByValue: true
+      });
+
+      if (result.result && result.result.value) {
+        if (result.result.value.success) {
+          log.info(`Громкость установлена: ${result.result.value.volume}% (raw: ${result.result.value.rawValue}, actual: ${result.result.value.actualValue})`);
+          return true;
+        } else {
+          log.error('Не удалось установить громкость:', result.result.value.message);
+          return false;
+        }
+      }
+      return false;
+    } catch (err) {
+      log.error('Ошибка при установке громкости:', err);
+      return false;
+    }
+  }
+
+  async changeVolume(delta) {
+    try {
+      const currentVolume = await this.getVolume();
+      if (currentVolume === null) {
+        log.error('Не удалось получить текущую громкость');
+        return false;
+      }
+
+      const newVolume = Math.max(0, Math.min(100, currentVolume + delta));
+      log.info(`Изменение громкости: ${currentVolume}% -> ${newVolume}% (delta: ${delta})`);
+      return await this.setVolume(newVolume);
+    } catch (err) {
+      log.error('Ошибка при изменении громкости:', err);
+      return false;
+    }
+  }
+
+  async seekTo(position) {
+    try {
+      const client = await this.getClient();
+      if (!client) {
+        log.error('Не удалось получить CDP клиент');
+        return false;
+      }
+
+      const { Runtime } = client;
+
+      log.info(`Перемотка на позицию: ${position}`);
+
+      const result = await Runtime.evaluate({
+        expression: `
+          (function() {
+            try {
+              const progressSlider = document.querySelector('[data-test-id="TIMECODE_SLIDER"]');
+              if (progressSlider) {
+                const maxValue = parseFloat(progressSlider.max) || 100;
+                const newValue = Math.max(0, Math.min(maxValue, ${position}));
+                
+                // Эмулируем события для React
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                nativeInputValueSetter.call(progressSlider, newValue);
+                
+                progressSlider.dispatchEvent(new Event('input', { bubbles: true }));
+                progressSlider.dispatchEvent(new Event('change', { bubbles: true }));
+                
+                console.log('Перемотка на позицию:', newValue);
+                return { success: true, position: newValue, max: maxValue };
+              }
+              return { success: false, message: 'Прогресс-бар не найден' };
+            } catch (err) {
+              return { success: false, message: err.message };
+            }
+          })()
+        `,
+        returnByValue: true
+      });
+
+      if (result.result && result.result.value) {
+        if (result.result.value.success) {
+          log.info(`Перемотка выполнена: ${result.result.value.position}/${result.result.value.max}`);
+          return true;
+        } else {
+          log.error('Не удалось выполнить перемотку:', result.result.value.message);
+          return false;
+        }
+      }
+      return false;
+    } catch (err) {
+      log.error('Ошибка при перемотке:', err);
+      return false;
+    }
+  }
+
+  async seekRelative(deltaTicks) {
+    try {
+      const client = await this.getClient();
+      if (!client) {
+        log.error('Не удалось получить CDP клиент');
+        return false;
+      }
+
+      const { Runtime } = client;
+
+      // Получаем текущую позицию и смещаем на delta секунд
+      const seekDelta = deltaTicks * 5; // Каждый тик = 5 секунд
+
+      log.info(`Относительная перемотка: ${seekDelta} секунд`);
+
+      const result = await Runtime.evaluate({
+        expression: `
+          (function() {
+            try {
+              const progressSlider = document.querySelector('[data-test-id="TIMECODE_SLIDER"]');
+              if (progressSlider) {
+                const currentValue = parseFloat(progressSlider.value) || 0;
+                const maxValue = parseFloat(progressSlider.max) || 100;
+                const delta = ${seekDelta};
+                const newValue = Math.max(0, Math.min(maxValue, currentValue + delta));
+                
+                // Эмулируем события для React
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                nativeInputValueSetter.call(progressSlider, newValue);
+                
+                progressSlider.dispatchEvent(new Event('input', { bubbles: true }));
+                progressSlider.dispatchEvent(new Event('change', { bubbles: true }));
+                
+                console.log('Перемотка:', currentValue, '->', newValue);
+                return { 
+                  success: true, 
+                  oldPosition: currentValue,
+                  newPosition: newValue, 
+                  max: maxValue,
+                  delta: delta
+                };
+              }
+              return { success: false, message: 'Прогресс-бар не найден' };
+            } catch (err) {
+              return { success: false, message: err.message };
+            }
+          })()
+        `,
+        returnByValue: true
+      });
+
+      if (result.result && result.result.value) {
+        if (result.result.value.success) {
+          const v = result.result.value;
+          log.info(`Перемотка выполнена: ${v.oldPosition} -> ${v.newPosition} (delta: ${v.delta})`);
+          return true;
+        } else {
+          log.error('Не удалось выполнить перемотку:', result.result.value.message);
+          return false;
+        }
+      }
+      return false;
+    } catch (err) {
+      log.error('Ошибка при перемотке:', err);
+      return false;
+    }
+  }
+
   async disconnect() {
     if (this.client) {
       try {
