@@ -1,0 +1,8 @@
+<svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="72" height="72" fill="#000000"/>
+  <!-- Pause icon - two vertical bars -->
+  <rect x="26" y="24" width="6" height="24" rx="2"
+        stroke="white" stroke-width="2.5" fill="none"/>
+  <rect x="40" y="24" width="6" height="24" rx="2"
+        stroke="white" stroke-width="2.5" fill="none"/>
+</svg>
