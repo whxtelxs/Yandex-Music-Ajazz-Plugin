@@ -13,6 +13,8 @@ yandexMusic.connect().then(() => {
 const buttonContexts = {
     playPause: [],
     like: [],
+    shuffle: [],
+    repeat: [],
     mute: [],
     cover: [],
     timeTotal: [],
@@ -31,6 +33,8 @@ let scrollingText = {
 
 let playbackCheckInterval = null;
 let likeCheckInterval = null;
+let shuffleCheckInterval = null;
+let repeatCheckInterval = null;
 let muteCheckInterval = null;
 let coverCheckInterval = null;
 let timeCheckInterval = null;
@@ -133,6 +137,33 @@ async function checkYandexMusicConnection() {
     const isConnected = await yandexMusic.checkConnection();
     log.info('Проверка соединения с Яндекс Музыкой:', isConnected ? 'Успешно' : 'Ошибка');
     return isConnected;
+}
+
+function clampVolumeStep(value) {
+    const n = parseInt(value, 10);
+    if (Number.isNaN(n)) return 5;
+    return Math.max(1, Math.min(99, n));
+}
+
+function createVolumeKeyActions(deltaSign) {
+    return {
+        default: { volumeStep: 5 },
+        _didReceiveSettings(data) {
+            this.data[data.context] = Object.assign({ ...this.default }, data.payload.settings);
+        },
+        async keyUp({ context }) {
+            const step = clampVolumeStep(this.data[context]?.volumeStep);
+            try {
+                const result = await yandexMusic.changeVolume(deltaSign * step);
+                if (!result) {
+                    plugin.showAlert(context);
+                }
+            } catch (error) {
+                log.error('Ошибка при изменении громкости кнопкой:', error);
+                plugin.showAlert(context);
+            }
+        }
+    };
 }
 
 async function checkPlaybackState() {
@@ -327,6 +358,38 @@ async function checkMuteState() {
         }
     } catch (error) {
         log.error('Ошибка в checkMuteState:', error);
+    }
+}
+
+async function checkShuffleState() {
+    try {
+        if (buttonContexts.shuffle.length === 0) return;
+
+        const pressed = await yandexMusic.getShufflePressed();
+        if (pressed === null) return;
+
+        buttonContexts.shuffle.forEach(context => {
+            plugin.setState(context, pressed ? 1 : 0);
+        });
+        log.info('Случайный порядок:', pressed ? 'вкл' : 'выкл');
+    } catch (error) {
+        log.error('Ошибка в checkShuffleState:', error);
+    }
+}
+
+async function checkRepeatState() {
+    try {
+        if (buttonContexts.repeat.length === 0) return;
+
+        const mode = await yandexMusic.getRepeatMode();
+        if (mode === null) return;
+
+        buttonContexts.repeat.forEach(context => {
+            plugin.setState(context, mode);
+        });
+        log.info('Режим повтора:', mode === 0 ? 'выкл' : mode === 1 ? 'список' : 'трек');
+    } catch (error) {
+        log.error('Ошибка в checkRepeatState:', error);
     }
 }
 
@@ -579,6 +642,8 @@ async function checkCoverState() {
 function startStateChecks() {
     if (playbackCheckInterval) clearInterval(playbackCheckInterval);
     if (likeCheckInterval) clearInterval(likeCheckInterval);
+    if (shuffleCheckInterval) clearInterval(shuffleCheckInterval);
+    if (repeatCheckInterval) clearInterval(repeatCheckInterval);
     if (muteCheckInterval) clearInterval(muteCheckInterval);
     if (coverCheckInterval) clearInterval(coverCheckInterval);
     if (timeCheckInterval) clearInterval(timeCheckInterval);
@@ -586,6 +651,8 @@ function startStateChecks() {
 
     playbackCheckInterval = setInterval(checkPlaybackState, 500);
     likeCheckInterval = setInterval(checkLikeState, 1000);
+    shuffleCheckInterval = setInterval(checkShuffleState, 1000);
+    repeatCheckInterval = setInterval(checkRepeatState, 1000);
     muteCheckInterval = setInterval(checkMuteState, 1000);
     coverCheckInterval = setInterval(checkCoverState, 3000);
     timeCheckInterval = setInterval(checkTimeState, 1000);
@@ -737,6 +804,62 @@ plugin["ym-like"] = new Actions({
     }
 });
 
+plugin["ym-shuffle"] = new Actions({
+    default: { state: 0 },
+    async _willAppear({ context }) {
+        log.info('YM Shuffle появился:', context);
+        if (!buttonContexts.shuffle.includes(context)) {
+            buttonContexts.shuffle.push(context);
+        }
+        await checkShuffleState();
+    },
+    _willDisappear({ context }) {
+        const i = buttonContexts.shuffle.indexOf(context);
+        if (i !== -1) buttonContexts.shuffle.splice(i, 1);
+    },
+    async keyUp({ context }) {
+        try {
+            const result = await yandexMusic.toggleShuffle();
+            if (!result) {
+                plugin.showAlert(context);
+                return;
+            }
+            await checkShuffleState();
+        } catch (error) {
+            log.error('Ошибка при переключении случайного порядка:', error);
+            plugin.showAlert(context);
+        }
+    }
+});
+
+plugin["ym-repeat"] = new Actions({
+    default: { state: 0 },
+    async _willAppear({ context }) {
+        log.info('YM Repeat появился:', context);
+        if (!buttonContexts.repeat.includes(context)) {
+            buttonContexts.repeat.push(context);
+        }
+        await checkRepeatState();
+    },
+    _willDisappear({ context }) {
+        const i = buttonContexts.repeat.indexOf(context);
+        if (i !== -1) buttonContexts.repeat.splice(i, 1);
+    },
+    async keyUp({ context }) {
+        try {
+            const result = await yandexMusic.toggleRepeat();
+            if (!result) {
+                plugin.showAlert(context);
+                return;
+            }
+            await checkRepeatState();
+        } catch (error) {
+            log.error('Ошибка при переключении повтора:', error);
+            plugin.showAlert(context);
+        }
+    }
+});
+
 plugin["ym-dislike"] = new Actions({
     default: {},
     async _willAppear({ context, payload }) {
@@ -787,6 +910,9 @@ plugin["ym-mute"] = new Actions({
     }
 });
 
+plugin["ym-volume-add"] = new Actions(createVolumeKeyActions(1));
+plugin["ym-volume-remove"] = new Actions(createVolumeKeyActions(-1));
+
 plugin["ym-cover"] = new Actions({
     default: {},
     async _willAppear({ context, payload }) {
@@ -821,8 +947,16 @@ plugin["ym-cover"] = new Actions({
             sendLogToPropertyInspector(`Удалена кнопка обложки. Осталось кнопок: ${buttonContexts.cover.length}`, 'info');
         }
     },
-    keyUp({ context, payload }) {
-        sendLogToPropertyInspector('Кнопка обложки не кликабельная', 'info');
+    async keyUp({ context, payload }) {
+        try {
+            const result = await yandexMusic.togglePlayback();
+            if (!result) {
+                plugin.showAlert(context);
+            }
+        } catch (error) {
+            log.error('Ошибка при переключении воспроизведения (обложка):', error);
+            plugin.showAlert(context);
+        }
     }
 });
 
@@ -886,13 +1020,11 @@ plugin["ym-time-total"] = new Actions({
     }
 });
 
-// Энкодер управления громкостью
 plugin["ym-volume-encoder"] = new Actions({
     default: {},
     async _willAppear({ context, payload }) {
         log.info("YM Volume Encoder появился:", context);
 
-        // Показываем текущую громкость
         const volume = await yandexMusic.getVolume();
         if (volume !== null) {
             plugin.setTitle(context, `${Math.round(volume)}%`);
@@ -903,13 +1035,11 @@ plugin["ym-volume-encoder"] = new Actions({
     _willDisappear({ context }) {
         log.info("YM Volume Encoder исчез:", context);
     },
-    // Обработка нажатия кнопки (Keypad mode)
     async keyUp({ context, payload }) {
         log.info("YM Volume Encoder keyUp:", context);
         try {
             const result = await yandexMusic.toggleMute();
             if (result) {
-                // Переключаем состояние иконки (0 = звук вкл, 1 = muted)
                 const currentState = payload?.state || 0;
                 plugin.setState(context, currentState === 0 ? 1 : 0);
             } else {
@@ -920,13 +1050,11 @@ plugin["ym-volume-encoder"] = new Actions({
             plugin.showAlert(context);
         }
     },
-    // Обработка нажатия энкодера (Knob mode) - mute/unmute
     async dialDown({ context, payload }) {
         log.info("YM Volume Encoder dialDown:", context, JSON.stringify(payload));
         try {
             const result = await yandexMusic.toggleMute();
             if (result) {
-                // Переключаем состояние иконки (0 = звук вкл, 1 = muted)
                 const currentState = payload?.state || 0;
                 plugin.setState(context, currentState === 0 ? 1 : 0);
             } else {
@@ -937,11 +1065,9 @@ plugin["ym-volume-encoder"] = new Actions({
             plugin.showAlert(context);
         }
     },
-    // Обработка вращения энкодера - изменение громкости
     async dialRotate({ context, payload }) {
         log.info("YM Volume Encoder dialRotate:", context, JSON.stringify(payload));
 
-        // payload.ticks содержит количество тиков (+ или -)
         const ticks = payload?.ticks || 0;
         log.info(`Тики вращения: ${ticks}`);
 
@@ -950,14 +1076,13 @@ plugin["ym-volume-encoder"] = new Actions({
             return;
         }
 
-        const volumeStep = 5; // Шаг изменения громкости в процентах
+        const volumeStep = 5;
         const delta = ticks * volumeStep;
 
         try {
             log.info(`Изменяем громкость на ${delta}%`);
             const result = await yandexMusic.changeVolume(delta);
             if (result) {
-                // Обновляем отображение громкости
                 const newVolume = await yandexMusic.getVolume();
                 if (newVolume !== null) {
                     plugin.setTitle(context, `${Math.round(newVolume)}%`);
@@ -974,7 +1099,6 @@ plugin["ym-volume-encoder"] = new Actions({
     }
 });
 
-// Энкодер перемотки трека
 plugin["ym-seek-encoder"] = new Actions({
     default: {},
     async _willAppear({ context, payload }) {
@@ -984,13 +1108,11 @@ plugin["ym-seek-encoder"] = new Actions({
     _willDisappear({ context }) {
         log.info("YM Seek Encoder исчез:", context);
     },
-    // Обработка нажатия кнопки (Keypad mode)
     async keyUp({ context, payload }) {
         log.info("YM Seek Encoder keyUp:", context);
         try {
             const result = await yandexMusic.togglePlayback();
             if (result) {
-                // Переключаем состояние иконки (0 = playing, 1 = paused)
                 const currentState = payload?.state || 0;
                 plugin.setState(context, currentState === 0 ? 1 : 0);
             } else {
@@ -1001,13 +1123,11 @@ plugin["ym-seek-encoder"] = new Actions({
             plugin.showAlert(context);
         }
     },
-    // Обработка нажатия энкодера (Knob mode) - play/pause
     async dialDown({ context, payload }) {
         log.info("YM Seek Encoder dialDown:", context, JSON.stringify(payload));
         try {
             const result = await yandexMusic.togglePlayback();
             if (result) {
-                // Переключаем состояние иконки (0 = playing, 1 = paused)
                 const currentState = payload?.state || 0;
                 plugin.setState(context, currentState === 0 ? 1 : 0);
             } else {
@@ -1018,11 +1138,9 @@ plugin["ym-seek-encoder"] = new Actions({
             plugin.showAlert(context);
         }
     },
-    // Обработка вращения энкодера - перемотка
     async dialRotate({ context, payload }) {
         log.info("YM Seek Encoder dialRotate:", context, JSON.stringify(payload));
 
-        // payload.ticks содержит количество тиков (+ или -)
         const ticks = payload?.ticks || 0;
 
         try {

@@ -997,6 +997,139 @@ class YandexMusicController {
     }
   }
 
+  async toggleShuffle() {
+    return await this._clickSonataControlByHrefFragment('shuffle');
+  }
+
+  async toggleRepeat() {
+    return await this._clickSonataControlByHrefFragment('repeat');
+  }
+
+  async _clickSonataControlByHrefFragment(fragment) {
+    try {
+      const client = await this.getClient();
+      if (!client) {
+        log.error('Не удалось получить CDP клиент');
+        return false;
+      }
+      const { Runtime } = client;
+      const result = await Runtime.evaluate({
+        expression: `
+          (function() {
+            try {
+              var bar = document.querySelector('.PlayerBarDesktopWithBackgroundProgressBar_root__bpmwN');
+              if (!bar) bar = document.querySelector('[data-test-id="PLAYERBAR_DESKTOP"]');
+              if (!bar) return { success: false, message: 'Нет панели плеера' };
+              var buttons = bar.querySelectorAll('button');
+              for (var i = 0; i < buttons.length; i++) {
+                var b = buttons[i];
+                var useEl = b.querySelector('svg use');
+                if (!useEl) continue;
+                var href = useEl.getAttribute('xlink:href') || useEl.getAttribute('href') || '';
+                if (href.indexOf('${fragment}') !== -1) {
+                  b.click();
+                  return { success: true };
+                }
+              }
+              return { success: false, message: 'Кнопка не найдена' };
+            } catch (err) {
+              return { success: false, message: err.message };
+            }
+          })()
+        `,
+        awaitPromise: true,
+        returnByValue: true
+      });
+      if (result.result && result.result.value && result.result.value.success) {
+        return true;
+      }
+      return false;
+    } catch (err) {
+      log.error('Ошибка при клике по кнопке плеера:', err);
+      return false;
+    }
+  }
+
+  async getShufflePressed() {
+    try {
+      const client = await this.getClient();
+      if (!client) return null;
+      const { Runtime } = client;
+      const result = await Runtime.evaluate({
+        expression: `
+          (function() {
+            try {
+              var bar = document.querySelector('.PlayerBarDesktopWithBackgroundProgressBar_root__bpmwN');
+              if (!bar) bar = document.querySelector('[data-test-id="PLAYERBAR_DESKTOP"]');
+              if (!bar) return { ok: false };
+              var buttons = bar.querySelectorAll('button');
+              for (var i = 0; i < buttons.length; i++) {
+                var b = buttons[i];
+                var useEl = b.querySelector('svg use');
+                if (!useEl) continue;
+                var href = useEl.getAttribute('xlink:href') || useEl.getAttribute('href') || '';
+                if (href.indexOf('shuffle') !== -1) {
+                  return { ok: true, shuffle: b.getAttribute('aria-pressed') === 'true' };
+                }
+              }
+              return { ok: false };
+            } catch (e) {
+              return { ok: false };
+            }
+          })()
+        `,
+        returnByValue: true
+      });
+      const v = result.result && result.result.value;
+      if (!v || !v.ok) return null;
+      return !!v.shuffle;
+    } catch (err) {
+      log.error('getShufflePressed:', err);
+      return null;
+    }
+  }
+
+  async getRepeatMode() {
+    try {
+      const client = await this.getClient();
+      if (!client) return null;
+      const { Runtime } = client;
+      const result = await Runtime.evaluate({
+        expression: `
+          (function() {
+            try {
+              var bar = document.querySelector('.PlayerBarDesktopWithBackgroundProgressBar_root__bpmwN');
+              if (!bar) bar = document.querySelector('[data-test-id="PLAYERBAR_DESKTOP"]');
+              if (!bar) return { ok: false };
+              var buttons = bar.querySelectorAll('button');
+              for (var i = 0; i < buttons.length; i++) {
+                var b = buttons[i];
+                var useEl = b.querySelector('svg use');
+                if (!useEl) continue;
+                var href = useEl.getAttribute('xlink:href') || useEl.getAttribute('href') || '';
+                if (href.indexOf('repeat') === -1 || href.indexOf('shuffle') !== -1) continue;
+                var mode = 0;
+                if (href.indexOf('repeat_one') !== -1) mode = 2;
+                else if (b.getAttribute('aria-pressed') === 'true') mode = 1;
+                return { ok: true, mode: mode };
+              }
+              return { ok: false };
+            } catch (e) {
+              return { ok: false };
+            }
+          })()
+        `,
+        returnByValue: true
+      });
+      const v = result.result && result.result.value;
+      if (!v || !v.ok) return null;
+      return v.mode;
+    } catch (err) {
+      log.error('getRepeatMode:', err);
+      return null;
+    }
+  }
+
   async disconnect() {
     if (this.client) {
       try {

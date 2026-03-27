@@ -221,6 +221,12 @@ function fallbackCopyTextToClipboard(text) {
     document.body.removeChild(textArea);
 }
 
+function clampVolumeStepPi(value) {
+    const n = parseInt(value, 10);
+    if (Number.isNaN(n)) return 5;
+    return Math.max(1, Math.min(99, n));
+}
+
 function initUI() {
     console.log('Инициализация UI Property Inspector...');
     
@@ -299,6 +305,23 @@ function initUI() {
             }
         });
     }
+
+    const volumeStepInput = document.getElementById('volumeStep');
+    if (volumeStepInput) {
+        volumeStepInput.addEventListener('input', () => {
+            if (!$settings) return;
+            let v = parseInt(volumeStepInput.value, 10);
+            if (Number.isNaN(v)) return;
+            v = clampVolumeStepPi(v);
+            $settings.volumeStep = v;
+        });
+        volumeStepInput.addEventListener('blur', () => {
+            if (!$settings) return;
+            let v = clampVolumeStepPi(volumeStepInput.value);
+            volumeStepInput.value = v;
+            $settings.volumeStep = v;
+        });
+    }
 }
 
 const $propEvent = {
@@ -319,6 +342,16 @@ const $propEvent = {
     },
     didReceiveSettings(data) {
         console.log('Получены настройки:', data);
+        const section = document.getElementById('volumeStepSection');
+        const volumeStepInput = document.getElementById('volumeStep');
+        const action = $action || '';
+        const isVolumeKeys = action.includes('ym-volume-add') || action.includes('ym-volume-remove');
+        if (section) {
+            section.style.display = isVolumeKeys ? 'block' : 'none';
+        }
+        if (isVolumeKeys && volumeStepInput && data.settings) {
+            volumeStepInput.value = clampVolumeStepPi(data.settings.volumeStep);
+        }
     },
     sendToPropertyInspector(data) {
         console.log('Получены данные от плагина:', data);
