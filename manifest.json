@@ -269,8 +269,7 @@
         }
       ],
       "Controllers": [
-        "Encoder",
-        "Keypad"
+        "Knob"
       ],
       "UserTitleEnabled": true,
       "SupportedInMultiActions": true,
@@ -293,8 +292,7 @@
         }
       ],
       "Controllers": [
-        "Encoder",
-        "Keypad"
+        "Knob"
       ],
       "UserTitleEnabled": true,
       "SupportedInMultiActions": true,
@@ -312,7 +310,7 @@
   "Description": "Плагин для управления Yandex Music через Ajazz.",
   "Category": "Yandex Music",
   "CategoryIcon": "static/App-logo.png",
-  "Version": "1.4.0",
+  "Version": "1.5.0",
   "URL": "https://whxtelxs.dev",
   "OS": [
     {

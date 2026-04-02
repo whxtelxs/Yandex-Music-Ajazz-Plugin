@@ -655,6 +655,66 @@ class YandexMusicController {
     }
   }
 
+  async getMuteIsMuted() {
+    try {
+      const client = await this.getClient();
+      if (!client) return null;
+      const { Runtime } = client;
+      const result = await Runtime.evaluate({
+        expression: `
+          (function() {
+            var muteButton = document.querySelector("button.ChangeVolume_button__4HLEr[data-test-id='CHANGE_VOLUME_BUTTON']");
+            if (muteButton) {
+              return muteButton.getAttribute('aria-label') === 'Включить звук';
+            }
+            var volumeOffSvg = document.querySelector("svg.ChangeVolume_icon__5Zv2a use[xlink:href='/icons/sprite.svg#volumeOff_xs']");
+            if (volumeOffSvg) return true;
+            return false;
+          })()
+        `,
+        returnByValue: true
+      });
+      if (result.result && result.result.value !== undefined && result.result.value !== null) {
+        return !!result.result.value;
+      }
+      return null;
+    } catch (err) {
+      log.error('getMuteIsMuted:', err);
+      return null;
+    }
+  }
+
+  async getPlaybackIsPlaying() {
+    try {
+      const client = await this.getClient();
+      if (!client) return null;
+      const { Runtime } = client;
+      const result = await Runtime.evaluate({
+        expression: `
+          (function() {
+            var pauseButton = document.querySelector("button.BaseSonataControlsDesktop_sonataButton__GbwFt[data-test-id='PAUSE_BUTTON']");
+            if (pauseButton) return true;
+            var playButton = document.querySelector("button.BaseSonataControlsDesktop_sonataButton__GbwFt[data-test-id='PLAY_BUTTON']");
+            if (playButton) return false;
+            var pauseSvg = document.querySelector("svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[xlink:href='/icons/sprite.svg#pause_filled_l']");
+            if (pauseSvg) return true;
+            var playSvg = document.querySelector("svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[xlink:href='/icons/sprite.svg#play_filled_l']");
+            if (playSvg) return false;
+            return false;
+          })()
+        `,
+        returnByValue: true
+      });
+      if (result.result && result.result.value !== undefined && result.result.value !== null) {
+        return !!result.result.value;
+      }
+      return null;
+    } catch (err) {
+      log.error('getPlaybackIsPlaying:', err);
+      return null;
+    }
+  }
+
   async getVolume() {
     try {
       const client = await this.getClient();

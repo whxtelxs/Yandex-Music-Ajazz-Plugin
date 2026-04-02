@@ -1031,6 +1031,11 @@ plugin["ym-volume-encoder"] = new Actions({
         } else {
             plugin.setTitle(context, 'VOL');
         }
+
+        const muted = await yandexMusic.getMuteIsMuted();
+        if (muted !== null) {
+            plugin.setState(context, muted ? 1 : 0);
+        }
     },
     _willDisappear({ context }) {
         log.info("YM Volume Encoder исчез:", context);
@@ -1040,8 +1045,11 @@ plugin["ym-volume-encoder"] = new Actions({
         try {
             const result = await yandexMusic.toggleMute();
             if (result) {
-                const currentState = payload?.state || 0;
-                plugin.setState(context, currentState === 0 ? 1 : 0);
+                await new Promise(r => setTimeout(r, 100));
+                const muted = await yandexMusic.getMuteIsMuted();
+                if (muted !== null) {
+                    plugin.setState(context, muted ? 1 : 0);
+                }
             } else {
                 plugin.showAlert(context);
             }
@@ -1055,8 +1063,11 @@ plugin["ym-volume-encoder"] = new Actions({
         try {
             const result = await yandexMusic.toggleMute();
             if (result) {
-                const currentState = payload?.state || 0;
-                plugin.setState(context, currentState === 0 ? 1 : 0);
+                await new Promise(r => setTimeout(r, 100));
+                const muted = await yandexMusic.getMuteIsMuted();
+                if (muted !== null) {
+                    plugin.setState(context, muted ? 1 : 0);
+                }
             } else {
                 plugin.showAlert(context);
             }
@@ -1104,6 +1115,11 @@ plugin["ym-seek-encoder"] = new Actions({
     async _willAppear({ context, payload }) {
         log.info("YM Seek Encoder появился:", context);
         plugin.setTitle(context, 'SEEK');
+
+        const playing = await yandexMusic.getPlaybackIsPlaying();
+        if (playing !== null) {
+            plugin.setState(context, playing ? 1 : 0);
+        }
     },
     _willDisappear({ context }) {
         log.info("YM Seek Encoder исчез:", context);
@@ -1113,8 +1129,11 @@ plugin["ym-seek-encoder"] = new Actions({
         try {
             const result = await yandexMusic.togglePlayback();
             if (result) {
-                const currentState = payload?.state || 0;
-                plugin.setState(context, currentState === 0 ? 1 : 0);
+                await new Promise(r => setTimeout(r, 100));
+                const playing = await yandexMusic.getPlaybackIsPlaying();
+                if (playing !== null) {
+                    plugin.setState(context, playing ? 1 : 0);
+                }
             } else {
                 plugin.showAlert(context);
             }
@@ -1128,8 +1147,11 @@ plugin["ym-seek-encoder"] = new Actions({
         try {
             const result = await yandexMusic.togglePlayback();
             if (result) {
-                const currentState = payload?.state || 0;
-                plugin.setState(context, currentState === 0 ? 1 : 0);
+                await new Promise(r => setTimeout(r, 100));
+                const playing = await yandexMusic.getPlaybackIsPlaying();
+                if (playing !== null) {
+                    plugin.setState(context, playing ? 1 : 0);
+                }
             } else {
                 plugin.showAlert(context);
             }
