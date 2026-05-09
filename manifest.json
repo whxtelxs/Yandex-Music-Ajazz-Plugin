@@ -299,6 +299,29 @@
       "Tooltip": "Вращение: перемотка внутри трека. Нажатие: плей/пауза",
       "UUID": "com.whxtelxs.streamdock.yandexmusicajazz.ym-seek-encoder",
       "PropertyInspectorPath": "propertyInspector/yandexmusicajazz/index.html"
+    },
+    {
+      "Icon": "static/ym-next.jpg",
+      "Name": "Треки (энкодер)",
+      "DisableAutomaticStates": false,
+      "States": [
+        {
+          "Image": "static/ym-next.jpg",
+          "Name": "Track"
+        },
+        {
+          "Image": "static/ym-pause.jpg",
+          "Name": "Pause"
+        }
+      ],
+      "Controllers": [
+        "Knob"
+      ],
+      "UserTitleEnabled": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Вращение: следующий/предыдущий трек. Нажатие: плей/пауза",
+      "UUID": "com.whxtelxs.streamdock.yandexmusicajazz.ym-track-encoder",
+      "PropertyInspectorPath": "propertyInspector/yandexmusicajazz/index.html"
     }
   ],
   "SDKVersion": 1,

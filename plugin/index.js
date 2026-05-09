@@ -1177,6 +1177,79 @@ plugin["ym-seek-encoder"] = new Actions({
     }
 });
 
+plugin["ym-track-encoder"] = new Actions({
+    default: {},
+    async _willAppear({ context, payload }) {
+        log.info("YM Track Encoder появился:", context);
+        plugin.setTitle(context, 'TRACK');
+
+        const playing = await yandexMusic.getPlaybackIsPlaying();
+        if (playing !== null) {
+            plugin.setState(context, playing ? 1 : 0);
+        }
+    },
+    _willDisappear({ context }) {
+        log.info("YM Track Encoder исчез:", context);
+    },
+    async keyUp({ context, payload }) {
+        log.info("YM Track Encoder keyUp:", context);
+        try {
+            const result = await yandexMusic.togglePlayback();
+            if (result) {
+                await new Promise(r => setTimeout(r, 100));
+                const playing = await yandexMusic.getPlaybackIsPlaying();
+                if (playing !== null) {
+                    plugin.setState(context, playing ? 1 : 0);
+                }
+            } else {
+                plugin.showAlert(context);
+            }
+        } catch (error) {
+            log.error('Ошибка при переключении воспроизведения через кнопку энкодера треков:', error);
+            plugin.showAlert(context);
+        }
+    },
+    async dialDown({ context, payload }) {
+        log.info("YM Track Encoder dialDown:", context, JSON.stringify(payload));
+        try {
+            const result = await yandexMusic.togglePlayback();
+            if (result) {
+                await new Promise(r => setTimeout(r, 100));
+                const playing = await yandexMusic.getPlaybackIsPlaying();
+                if (playing !== null) {
+                    plugin.setState(context, playing ? 1 : 0);
+                }
+            } else {
+                plugin.showAlert(context);
+            }
+        } catch (error) {
+            log.error('Ошибка при переключении воспроизведения через энкодер треков:', error);
+            plugin.showAlert(context);
+        }
+    },
+    async dialRotate({ context, payload }) {
+        log.info("YM Track Encoder dialRotate:", context, JSON.stringify(payload));
+
+        const ticks = payload?.ticks || 0;
+        if (ticks === 0) {
+            return;
+        }
+
+        try {
+            const result = ticks > 0
+                ? await yandexMusic.nextTrack()
+                : await yandexMusic.previousTrack();
+
+            if (!result) {
+                plugin.showAlert(context);
+            }
+        } catch (error) {
+            log.error('Ошибка при переключении трека через энкодер:', error);
+            plugin.showAlert(context);
+        }
+    }
+});
+
 plugin.ws.on('message', (data) => {
     try {
         const message = JSON.parse(data.toString());
