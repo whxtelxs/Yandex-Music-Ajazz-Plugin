@@ -1,30 +1,29 @@
 const yandexMusic = require('./utils/yandex-music');
 
 async function testConnection() {
-    console.log('Проверка соединения с Яндекс Музыкой...');
-    
+    console.log('[testConnection] Проверка соединения с Яндекс Музыкой');
+
     try {
         const isConnected = await yandexMusic.checkConnection();
-        
+
         if (isConnected) {
-            console.log('✅ Соединение с Яндекс Музыкой установлено успешно!');
-            
-            console.log('Пробуем переключить воспроизведение...');
+            console.log('[testConnection] Соединение установлено');
+
+            console.log('[testConnection] Переключение воспроизведения');
             const playbackResult = await yandexMusic.togglePlayback();
-            
+
             if (playbackResult) {
-                console.log('✅ Успешно переключили воспроизведение!');
+                console.log('[testConnection] Воспроизведение переключено');
             } else {
-                console.log('❌ Не удалось переключить воспроизведение.');
+                console.log('[testConnection] Не удалось переключить воспроизведение');
             }
         } else {
-            console.log('❌ Не удалось установить соединение с Яндекс Музыкой.');
-            console.log('Убедитесь, что Яндекс Музыка запущена с параметром --remote-debugging-port=9222');
-            console.log('Пример запуска: "C:\\Users\\<имя_пользователя>\\AppData\\Local\\Programs\\YandexMusic\\Яндекс Музыка.exe" --remote-debugging-port=9222');
+            console.log('[testConnection] Соединение не установлено');
+            console.log('[testConnection] Запустите Яндекс Музыку с --remote-debugging-port=9222');
         }
     } catch (error) {
-        console.error('❌ Произошла ошибка при проверке соединения:', error);
+        console.error('[testConnection] Ошибка:', error);
     }
 }
 
-testConnection().catch(console.error); 
+testConnection().catch(console.error);

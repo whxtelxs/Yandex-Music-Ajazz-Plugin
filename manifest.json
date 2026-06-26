@@ -271,7 +271,7 @@
       "Controllers": [
         "Knob"
       ],
-      "UserTitleEnabled": true,
+      "UserTitleEnabled": false,
       "SupportedInMultiActions": true,
       "Tooltip": "Вращение: громкость. Нажатие: выключить/включить звук",
       "UUID": "com.whxtelxs.streamdock.yandexmusicajazz.ym-volume-encoder",
@@ -280,21 +280,17 @@
     {
       "Icon": "static/ym-seek-encoder.jpg",
       "Name": "Перемотка (энкодер)",
-      "DisableAutomaticStates": false,
+      "DisableAutomaticStates": true,
       "States": [
         {
           "Image": "static/ym-seek-encoder.jpg",
           "Name": "Seek"
-        },
-        {
-          "Image": "static/ym-pause.jpg",
-          "Name": "Pause"
         }
       ],
       "Controllers": [
         "Knob"
       ],
-      "UserTitleEnabled": true,
+      "UserTitleEnabled": false,
       "SupportedInMultiActions": true,
       "Tooltip": "Вращение: перемотка внутри трека. Нажатие: плей/пауза",
       "UUID": "com.whxtelxs.streamdock.yandexmusicajazz.ym-seek-encoder",
@@ -303,21 +299,17 @@
     {
       "Icon": "static/ym-next.jpg",
       "Name": "Треки (энкодер)",
-      "DisableAutomaticStates": false,
+      "DisableAutomaticStates": true,
       "States": [
         {
           "Image": "static/ym-next.jpg",
           "Name": "Track"
-        },
-        {
-          "Image": "static/ym-pause.jpg",
-          "Name": "Pause"
         }
       ],
       "Controllers": [
         "Knob"
       ],
-      "UserTitleEnabled": true,
+      "UserTitleEnabled": false,
       "SupportedInMultiActions": true,
       "Tooltip": "Вращение: следующий/предыдущий трек. Нажатие: плей/пауза",
       "UUID": "com.whxtelxs.streamdock.yandexmusicajazz.ym-track-encoder",

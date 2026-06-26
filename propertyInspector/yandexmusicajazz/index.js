@@ -6,13 +6,14 @@ const $local = true, $back = false;
 let logsWindow = null;
 let allLogs = [];
 
-function addLog(message, type = 'info') {
+function addLog(scope, message, type = 'info') {
     const logsContainer = $('#logsContainer');
     if (!logsContainer) return;
     
     const timestamp = new Date().toLocaleTimeString();
     const logData = {
         timestamp: timestamp,
+        scope: scope,
         message: message,
         type: type,
         fullTimestamp: new Date().toISOString()
@@ -26,7 +27,7 @@ function addLog(message, type = 'info') {
     
     const logEntry = document.createElement('div');
     logEntry.className = `log-entry log-${type}`;
-    logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> ${message}`;
+    logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> [${scope}] ${message}`;
     
     logsContainer.appendChild(logEntry);
     logsContainer.scrollTop = logsContainer.scrollHeight;
@@ -43,13 +44,13 @@ function addLog(message, type = 'info') {
         allLogs = allLogs.slice(-1000);
     }
 
-    console.log(`[${type}] ${message}`);
+    console.log(`[${scope}] ${message}`);
 }
 
 function clearLogs() {
     const logsContainer = $('#logsContainer');
     if (logsContainer) {
-        logsContainer.innerHTML = '<div class="text-muted">Логи будут отображаться здесь...</div>';
+        logsContainer.innerHTML = '<div class="text-muted">Логи будут отображаться здесь</div>';
     }
     allLogs = [];
     if (logsWindow && !logsWindow.closed) {
@@ -172,7 +173,7 @@ function updateLogsWindow() {
     
     logsContent.innerHTML = allLogs.map(log => 
         `<div class="log-entry log-${log.type}">
-            <span class="log-timestamp">[${log.timestamp}]</span> ${log.message}
+            <span class="log-timestamp">[${log.timestamp}]</span> [${log.scope || 'unknown'}] ${log.message}
         </div>`
     ).join('');
     
@@ -181,14 +182,14 @@ function updateLogsWindow() {
 
 function copyLogs() {
     const logsText = allLogs.map(log => 
-        `[${log.timestamp}] ${log.type.toUpperCase()}: ${log.message}`
+        `[${log.timestamp}] [${log.scope || 'unknown'}] ${log.type.toUpperCase()}: ${log.message}`
     ).join('\n');
     
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(logsText).then(() => {
-            addLog('✅ Логи скопированы в буфер обмена', 'info');
+            addLog('copyLogs', 'Логи скопированы в буфер обмена', 'info');
         }).catch(err => {
-            addLog('❌ Ошибка копирования: ' + err.message, 'error');
+            addLog('copyLogs', 'Ошибка копирования: ' + err.message, 'error');
             fallbackCopyTextToClipboard(logsText);
         });
     } else {
@@ -210,12 +211,12 @@ function fallbackCopyTextToClipboard(text) {
     try {
         const successful = document.execCommand('copy');
         if (successful) {
-            addLog('✅ Логи скопированы в буфер обмена (fallback)', 'info');
+            addLog('copyLogs', 'Логи скопированы в буфер обмена (fallback)', 'info');
         } else {
-            addLog('❌ Не удалось скопировать логи', 'error');
+            addLog('copyLogs', 'Не удалось скопировать логи', 'error');
         }
     } catch (err) {
-        addLog('❌ Ошибка копирования: ' + err.message, 'error');
+        addLog('copyLogs', 'Ошибка копирования: ' + err.message, 'error');
     }
     
     document.body.removeChild(textArea);
@@ -225,6 +226,36 @@ function clampVolumeStepPi(value) {
     const n = parseInt(value, 10);
     if (Number.isNaN(n)) return 5;
     return Math.max(1, Math.min(99, n));
+}
+
+function clampTextSizePi(value, defaultVal, min, max) {
+    const n = parseInt(value, 10);
+    if (Number.isNaN(n)) return defaultVal;
+    return Math.max(min, Math.min(max, n));
+}
+
+function isVolumeStepAction(action) {
+    return action.includes('ym-volume-add')
+        || action.includes('ym-volume-remove')
+        || action.includes('ym-volume-encoder');
+}
+
+function isTrackInfoAction(action) {
+    return action.includes('ym-track-info');
+}
+
+function isTimeTotalAction(action) {
+    return action.includes('ym-time-total');
+}
+
+function getTextSizeLimits(action) {
+    if (isTrackInfoAction(action)) {
+        return { min: 4, max: 24, defaultVal: 12 };
+    }
+    if (isTimeTotalAction(action)) {
+        return { min: 3, max: 12, defaultVal: 6 };
+    }
+    return { min: 3, max: 24, defaultVal: 12 };
 }
 
 function initUI() {
@@ -322,6 +353,25 @@ function initUI() {
             $settings.volumeStep = v;
         });
     }
+
+    const textSizeInput = document.getElementById('textSize');
+    if (textSizeInput) {
+        textSizeInput.addEventListener('input', () => {
+            if (!$settings || !$action) return;
+            const limits = getTextSizeLimits($action);
+            let v = parseInt(textSizeInput.value, 10);
+            if (Number.isNaN(v)) return;
+            v = clampTextSizePi(v, limits.defaultVal, limits.min, limits.max);
+            $settings.textSize = v;
+        });
+        textSizeInput.addEventListener('blur', () => {
+            if (!$settings || !$action) return;
+            const limits = getTextSizeLimits($action);
+            let v = clampTextSizePi(textSizeInput.value, limits.defaultVal, limits.min, limits.max);
+            textSizeInput.value = v;
+            $settings.textSize = v;
+        });
+    }
 }
 
 const $propEvent = {
@@ -342,15 +392,39 @@ const $propEvent = {
     },
     didReceiveSettings(data) {
         console.log('Получены настройки:', data);
-        const section = document.getElementById('volumeStepSection');
+        const volumeSection = document.getElementById('volumeStepSection');
+        const textSection = document.getElementById('textSizeSection');
         const volumeStepInput = document.getElementById('volumeStep');
+        const textSizeInput = document.getElementById('textSize');
+        const textSizeHint = document.getElementById('textSizeHint');
         const action = $action || '';
-        const isVolumeKeys = action.includes('ym-volume-add') || action.includes('ym-volume-remove');
-        if (section) {
-            section.style.display = isVolumeKeys ? 'block' : 'none';
+        const showVolume = isVolumeStepAction(action);
+        const showTextSize = isTrackInfoAction(action) || isTimeTotalAction(action);
+
+        if (volumeSection) {
+            volumeSection.style.display = showVolume ? 'block' : 'none';
         }
-        if (isVolumeKeys && volumeStepInput && data.settings) {
+        if (textSection) {
+            textSection.style.display = showTextSize ? 'block' : 'none';
+        }
+        if (showVolume && volumeStepInput && data.settings) {
             volumeStepInput.value = clampVolumeStepPi(data.settings.volumeStep);
+        }
+        if (showTextSize && textSizeInput && data.settings) {
+            const limits = getTextSizeLimits(action);
+            textSizeInput.min = limits.min;
+            textSizeInput.max = limits.max;
+            textSizeInput.value = clampTextSizePi(
+                data.settings.textSize,
+                limits.defaultVal,
+                limits.min,
+                limits.max
+            );
+            if (textSizeHint) {
+                textSizeHint.textContent = isTimeTotalAction(action)
+                    ? `От ${limits.min} до ${limits.max} символов в строке. По умолчанию ${limits.defaultVal}.`
+                    : `От ${limits.min} до ${limits.max} символов в бегущей строке. По умолчанию ${limits.defaultVal}. Меньше — крупнее текст.`;
+            }
         }
     },
     sendToPropertyInspector(data) {
@@ -368,11 +442,11 @@ const $propEvent = {
             if (data.status === 'connected') {
                 connectionStatus.textContent = 'Подключено';
                 connectionStatus.className = 'badge bg-success';
-                console.log('✅ Соединение с Яндекс Музыкой установлено');
+                console.log('[onPluginMessage] Соединение с Яндекс Музыкой установлено');
             } else {
                 connectionStatus.textContent = 'Не подключено';
                 connectionStatus.className = 'badge bg-danger';
-                console.log('❌ Не удалось подключиться к Яндекс Музыке');
+                console.log('[onPluginMessage] Не удалось подключиться к Яндекс Музыке');
                 
                 const debugPortInput = document.getElementById('debugPort');
                 const port = debugPortInput ? debugPortInput.value : '9222';
@@ -381,7 +455,7 @@ const $propEvent = {
         }
         
         if (data.command === 'portChanged') {
-            console.log(`✅ Порт изменен на ${data.port}`);
+            console.log(`[onPluginMessage] Порт изменен на ${data.port}`);
             
             if (portHint) {
                 portHint.textContent = `Убедитесь, что Яндекс Музыка запущена с параметром --remote-debugging-port=${data.port}`;

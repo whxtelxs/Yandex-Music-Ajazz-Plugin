@@ -51,6 +51,19 @@
             </div>
         </div>
 
+        <div id="textSizeSection" class="card mb-3 bg-dark" style="display: none;">
+            <div class="card-header">
+                <h5 class="card-title">Текст на кнопке</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="textSize" class="form-label">Символов в строке</label>
+                    <input type="number" class="form-control" id="textSize" min="3" max="24" value="12" step="1">
+                    <div class="form-text text-muted mt-1" id="textSizeHint">Меньше значение — крупнее текст на кнопке.</div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script src="../utils/common.js"></script>
