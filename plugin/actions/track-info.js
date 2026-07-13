@@ -3,12 +3,12 @@
 const { Actions, log } = require('../utils/plugin');
 const { sendLogToPropertyInspector } = require('../lib/helpers');
 const { addContext, removeContext, hasContext, buttonContexts } = require('../lib/contexts');
-const { resetScrollingText } = require('../lib/app-state');
+const { setTrackInfoDisplay } = require('../lib/display');
 const { checkTrackInfoState } = require('../lib/state-sync');
 
 module.exports = function registerTrackInfoAction(plugin) {
     plugin['ym-track-info'] = new Actions({
-        default: { textSize: 12 },
+        default: { textSize: 12, fontSize: 14 },
         _didReceiveSettings(data) {
             this.data[data.context] = Object.assign({ ...this.default }, data.payload.settings);
             if (buttonContexts.trackInfo.includes(data.context)) {
@@ -22,10 +22,9 @@ module.exports = function registerTrackInfoAction(plugin) {
             if (!hasContext('trackInfo', context)) {
                 addContext('trackInfo', context);
                 sendLogToPropertyInspector(`Добавлена кнопка информации о треке. Всего кнопок: ${buttonContexts.trackInfo.length}`, 'info');
-                resetScrollingText();
             }
 
-            plugin.setTitle(context, 'Загрузка...');
+            setTrackInfoDisplay(context, 'Загрузка...');
             await checkTrackInfoState();
         },
         _willDisappear({ context }) {

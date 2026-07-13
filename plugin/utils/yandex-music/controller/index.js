@@ -1,5 +1,8 @@
 'use strict';
 
+const { OperationQueue } = require('../../../lib/operation-queue');
+const performance = require('../../../lib/performance');
+
 const mixins = [
   require('./connection'),
   require('./dom-runtime'),
@@ -7,7 +10,8 @@ const mixins = [
   require('./like-dislike'),
   require('./volume'),
   require('./seek-track'),
-  require('./shuffle-repeat')
+  require('./shuffle-repeat'),
+  require('./readiness')
 ];
 
 class YandexMusicController {
@@ -17,14 +21,24 @@ class YandexMusicController {
     this.client = null;
     this.connectionPromise = null;
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 3;
     this.reconnectDelay = 1000;
     this.vibeShuffleState = null;
     this.vibeRepeatMode = null;
     this.remoteState = null;
     this.remoteStateUpdatedAt = 0;
     this.onRemoteStateChange = null;
+    this.onConnectionChange = null;
     this._observerSetup = false;
+    this._clientGeneration = 0;
+    this._reconnectTimer = null;
+    this._manualDisconnect = false;
+    this._domQueue = new OperationQueue({
+      onStart: () => performance.increment('cdp.started'),
+      onFinish: (_item, duration) => {
+        performance.increment('cdp.completed');
+        performance.record('cdp.evaluate', duration);
+      }
+    });
   }
 }
 

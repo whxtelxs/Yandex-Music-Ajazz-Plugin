@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Yandex Music Ajazz Plugin</title>
+    <link href="/assets/tailwind.css" rel="stylesheet">
+</head>
+<body class="app-body">
+    <div id="appShell">
+        <div id="toastStack" class="toast-stack" aria-live="polite"></div>
+
+        <div class="app-layout">
+        <aside class="sidebar" aria-label="Разделы настроек">
+            <div class="sidebar-brand">
+                <div class="brand-mark-lg">
+                    <img src="/assets/logo.png" alt="" class="cover-image">
+                </div>
+                <div class="sidebar-brand-text">
+                    <p class="sidebar-title">Yandex Music</p>
+                    <p class="sidebar-subtitle">Ajazz Plugin</p>
+                </div>
+            </div>
+
+            <nav class="sidebar-island">
+                <button type="button" class="nav-item nav-item-active" data-panel="connection">Соединение</button>
+                <button type="button" class="nav-item" data-panel="volume">Громкость</button>
+                <button type="button" class="nav-item" data-panel="text">Текст</button>
+                <button type="button" class="nav-item" data-panel="discord">Discord</button>
+                <button type="button" class="nav-item" data-panel="debug">Дебаг</button>
+                <button type="button" class="nav-item" data-panel="updates">Обновления</button>
+                <button type="button" class="nav-item" data-panel="github">GitHub</button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <a href="https://github.com/whxtelxs/Yandex-Music-Ajazz-Plugin" class="sidebar-credit" target="_blank" rel="noopener noreferrer">создано с ❤️ whxtelxs</a>
+            </div>
+        </aside>
+
+        <main class="content-area">
+            <section id="panel-connection" class="view-panel view-panel-active" aria-labelledby="connectionHeading">
+                <header class="view-header">
+                    <h1 id="connectionHeading" class="view-title">Соединение</h1>
+                    <span id="musicStatus" class="status-pill status-pill-neutral is-hidden" aria-hidden="true"></span>
+                </header>
+                <div class="view-card">
+                    <label for="debugPort" class="field-label">Порт отладки</label>
+                    <input id="debugPort" class="field-input" type="number" inputmode="numeric" min="1" max="65535" value="9222">
+                    <p class="field-hint">Параметр <span class="mono-hint">--remote-debugging-port</span> при запуске Яндекс Музыки</p>
+                    <p id="activePortInfo" class="field-hint is-hidden"></p>
+                    <button id="launchAppBtn" type="button" class="btn-accent">
+                        Запустить Yandex Music
+                    </button>
+                    <button id="checkConnectionBtn" type="button" class="btn-accent btn-accent-outline">
+                        Проверить соединение
+                    </button>
+                </div>
+            </section>
+
+            <section id="panel-volume" class="view-panel is-hidden" aria-labelledby="volumeHeading">
+                <header class="view-header">
+                    <h1 id="volumeHeading" class="view-title">Громкость</h1>
+                </header>
+                <div class="view-card setting-card">
+                    <div class="setting-section">
+                        <div class="setting-section-head">
+                            <div class="setting-section-copy">
+                                <p class="setting-section-title">Шаг изменения</p>
+                                <p class="setting-section-desc">Для кнопок и энкодера громкости</p>
+                            </div>
+                            <output id="volumeStepValue" for="volumeStep" class="setting-value">5%</output>
+                        </div>
+                        <input id="volumeStep" class="range-input" type="range" min="1" max="99" value="5">
+                    </div>
+                </div>
+            </section>
+
+            <section id="panel-text" class="view-panel is-hidden" aria-labelledby="textHeading">
+                <header class="view-header">
+                    <h1 id="textHeading" class="view-title">Текст на дисплее</h1>
+                </header>
+                <div class="view-card setting-card">
+                    <div class="setting-section">
+                        <div class="setting-section-head">
+                            <div class="setting-section-copy">
+                                <p class="setting-section-title">Длина строки</p>
+                                <p class="setting-section-desc">Сколько символов видно в бегущей строке названия трека</p>
+                            </div>
+                            <output id="trackInfoTextSizeValue" for="trackInfoTextSize" class="setting-value">12</output>
+                        </div>
+                        <input id="trackInfoTextSize" class="range-input" type="range" min="4" max="24" value="12">
+                    </div>
+                    <div class="setting-section">
+                        <div class="setting-section-head">
+                            <div class="setting-section-copy">
+                                <p class="setting-section-title">Размер шрифта</p>
+                                <p class="setting-section-desc">Размер названия трека в пикселях</p>
+                            </div>
+                            <output id="trackInfoFontSizeValue" for="trackInfoFontSize" class="setting-value">14</output>
+                        </div>
+                        <input id="trackInfoFontSize" class="range-input" type="range" min="8" max="28" value="14">
+                    </div>
+                    <div class="setting-section setting-section-last">
+                        <div class="setting-section-head">
+                            <div class="setting-section-copy">
+                                <p class="setting-section-title">Размер шрифта</p>
+                                <p class="setting-section-desc">Размер времени трека в пикселях</p>
+                            </div>
+                            <output id="timeTotalFontSizeValue" for="timeTotalFontSize" class="setting-value">14</output>
+                        </div>
+                        <input id="timeTotalFontSize" class="range-input" type="range" min="8" max="28" value="14">
+                    </div>
+                </div>
+            </section>
+
+            <section id="panel-discord" class="view-panel is-hidden" aria-labelledby="discordHeading">
+                <header class="view-header">
+                    <h1 id="discordHeading" class="view-title">Discord</h1>
+                    <span id="discordStatusPill" class="status-pill status-pill-neutral">—</span>
+                </header>
+                <div class="view-card setting-card">
+                    <div class="setting-section setting-section-last">
+                        <label class="toggle" for="discordRpcEnabled">
+                            <input id="discordRpcEnabled" class="toggle-input" type="checkbox">
+                            <span class="toggle-track" aria-hidden="true">
+                                <span class="toggle-thumb"></span>
+                            </span>
+                            <span class="toggle-label">Показывать текущий трек в Discord</span>
+                        </label>
+                        <p id="discordStatusMessage" class="field-hint"></p>
+                        <p class="field-hint">Если статус «Ошибка»: перезапустите Discord (Ctrl+R), подождите ~30 сек и включите Настройки → Конфиденциальность → «Показывать текущую активность».</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="panel-debug" class="view-panel is-hidden" aria-labelledby="debugHeading">
+                <header class="view-header">
+                    <h1 id="debugHeading" class="view-title">Дебаг</h1>
+                </header>
+                <div class="view-card view-card-stretch">
+                    <div class="debug-toolbar">
+                        <label class="toggle" for="debugMode">
+                            <input id="debugMode" class="toggle-input" type="checkbox">
+                            <span class="toggle-track" aria-hidden="true">
+                                <span class="toggle-thumb"></span>
+                            </span>
+                            <span class="toggle-label">Режим отладки</span>
+                        </label>
+                        <button id="clearDebugBtn" type="button" class="btn-ghost">Очистить</button>
+                    </div>
+                    <p class="field-hint">Логи плагина в реальном времени, без записи в файл</p>
+                    <div id="debugConsole" class="debug-console" aria-live="polite" aria-relevant="additions">
+                        <p class="debug-empty">Включите режим отладки, чтобы видеть логи</p>
+                    </div>
+                </div>
+            </section>
+            <section id="panel-github" class="view-panel is-hidden" aria-labelledby="githubHeading">
+                <header class="view-header">
+                    <h1 id="githubHeading" class="view-title">GitHub</h1>
+                </header>
+                <div class="view-card">
+                    <p class="field-hint">Помогите улучшить плагин: сообщите о баге, предложите идею или поставьте звезду репозиторию.</p>
+                    <div class="github-actions">
+                        <a href="https://github.com/whxtelxs/Yandex-Music-Ajazz-Plugin/issues/new?template=bug_report.yml" class="btn-accent" target="_blank" rel="noopener noreferrer">
+                            Сообщить о баге
+                        </a>
+                        <a href="https://github.com/whxtelxs/Yandex-Music-Ajazz-Plugin/issues/new?template=feature_request.yml" class="btn-accent btn-accent-outline" target="_blank" rel="noopener noreferrer">
+                            Предложение по улучшению
+                        </a>
+                        <a href="https://github.com/whxtelxs/Yandex-Music-Ajazz-Plugin" class="btn-accent btn-accent-outline" target="_blank" rel="noopener noreferrer">
+                            Поставить звезду
+                        </a>
+                    </div>
+                </div>
+            </section>
+
+            <section id="panel-updates" class="view-panel is-hidden" aria-labelledby="updatesHeading">
+                <header class="view-header">
+                    <h1 id="updatesHeading" class="view-title">Обновления</h1>
+                    <span id="updateStatusPill" class="status-pill status-pill-neutral">—</span>
+                </header>
+                <div class="view-card">
+                    <div class="field-row">
+                        <span class="field-label-inline">Текущая версия</span>
+                        <output id="currentVersionValue" class="value-output">—</output>
+                    </div>
+                    <div id="latestVersionRow" class="field-row is-hidden">
+                        <span class="field-label-inline">Доступная версия</span>
+                        <output id="latestVersionValue" class="value-output">—</output>
+                    </div>
+                    <p id="updateSummary" class="field-hint">Проверяем обновления…</p>
+                    <pre id="updateNotes" class="update-notes is-hidden"></pre>
+                    <div class="update-actions">
+                        <button id="openReleaseBtn" type="button" class="btn-accent is-hidden" disabled>
+                            Открыть релиз
+                        </button>
+                        <button id="checkUpdatesBtn" type="button" class="btn-accent btn-accent-outline">
+                            Проверить обновления
+                        </button>
+                    </div>
+                    <p id="updateMessage" class="field-hint"></p>
+                </div>
+            </section>
+        </main>
+    </div>
+    </div>
+
+    <div id="disconnectScreen" class="disconnect-screen is-hidden" role="alert">
+        <div class="disconnect-card">
+            <p class="disconnect-title">Соединение прервано</p>
+            <p class="disconnect-text">Откройте заново настройки</p>
+        </div>
+    </div>
+
+    <script src="/assets/app.js"></script>
+</body>
+</html>

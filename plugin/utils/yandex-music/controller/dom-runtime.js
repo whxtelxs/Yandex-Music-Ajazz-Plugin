@@ -4,22 +4,30 @@ const { log } = require('../../plugin');
 const { YM_DOM_HELPERS } = require('../dom');
 
 module.exports = {
-  async _evaluateDom(body) {
-    const client = await this.getClient();
-    if (!client) return null;
-    const { Runtime } = client;
-    const result = await Runtime.evaluate({
-      expression: `(function() { ${YM_DOM_HELPERS} ${body} })()`,
-      awaitPromise: true,
-      returnByValue: true
-    });
-    return result.result?.value ?? null;
+  async _evaluateDom(body, options = {}) {
+    const priority = options.priority || 'background';
+    const key = options.key || null;
+    return this._domQueue.enqueue(async () => {
+      const client = await this.getClient();
+      if (!client) return null;
+      const generation = this._clientGeneration;
+      const result = await client.Runtime.evaluate({
+        expression: `(function() { ${body} })()`,
+        awaitPromise: true,
+        returnByValue: true
+      });
+      if (generation !== this._clientGeneration || client !== this.client) return null;
+      if (result.exceptionDetails) {
+        throw new Error(result.exceptionDetails.text || 'DOM evaluation failed');
+      }
+      return result.result?.value ?? null;
+    }, { priority, key });
   },
 
   async _runDomAction(helperCall, actionDescription) {
     try {
       log.info(`Выполнение действия: ${actionDescription}`);
-      const value = await this._evaluateDom(`return ${helperCall};`);
+      const value = await this._evaluateDom(`return ${helperCall};`, { priority: 'user' });
       if (value && value.success) {
         log.info(`${actionDescription} выполнено успешно${value.message ? ` (${value.message})` : ''}`);
         return true;
@@ -35,9 +43,10 @@ module.exports = {
 
   async _setupStateObserver(client) {
     if (this._observerSetup) return;
+    const generation = this._clientGeneration;
 
     client.on('Runtime.bindingCalled', (params) => {
-      if (params.name !== 'ymAjazzNotify') return;
+      if (params.name !== 'ymAjazzNotify' || generation !== this._clientGeneration || client !== this.client) return;
       try {
         this.remoteState = JSON.parse(params.payload);
         this.remoteStateUpdatedAt = Date.now();
@@ -57,13 +66,21 @@ module.exports = {
 
     await client.Runtime.addBinding({ name: 'ymAjazzNotify' });
 
-    const script = `(function() {
+    const script = `
       ${YM_DOM_HELPERS}
-      ymInstallAjazzObserver();
-    })();`;
+      window.__YM_AJAZZ_HELPERS_READY__ = true;
+      if (document.documentElement) {
+        ymInstallAjazzObserver();
+      } else {
+        document.addEventListener('DOMContentLoaded', ymInstallAjazzObserver, { once: true });
+      }
+    `;
 
     await client.Page.addScriptToEvaluateOnNewDocument({ source: script });
-    await client.Runtime.evaluate({ expression: script, returnByValue: false });
+    const result = await client.Runtime.evaluate({ expression: script, returnByValue: false });
+    if (result.exceptionDetails) {
+      throw new Error(result.exceptionDetails.text || 'Не удалось установить DOM runtime');
+    }
     this._observerSetup = true;
     log.info('Наблюдатель состояния Yandex Music установлен');
   },
@@ -73,7 +90,10 @@ module.exports = {
   },
 
   async refreshRemoteState() {
-    const value = await this._evaluateDom('return window.__YM_AJAZZ_STATE || null;');
+    const value = await this._evaluateDom('return window.__YM_AJAZZ_STATE || null;', {
+      priority: 'sync',
+      key: 'remote-state'
+    });
     if (value) {
       this.remoteState = value;
       this.remoteStateUpdatedAt = Date.now();

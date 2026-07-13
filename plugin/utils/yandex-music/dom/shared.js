@@ -2,8 +2,9 @@
 
 module.exports = `
 function ymFindSonataPlayerBar() {
-  return document.querySelector('.PlayerBarDesktopWithBackgroundProgressBar_root__bpmwN')
-    || document.querySelector('[data-test-id="PLAYERBAR_DESKTOP"]');
+  return ymQueryDeep('[class*="PlayerBarDesktopWithBackgroundProgressBar_root"]')
+    || ymQueryDeep('[data-test-id="PLAYERBAR_DESKTOP"]')
+    || ymQueryDeep('[class*="PlayerBarDesktopWithBackgroundProgressBar_info"]');
 }
 
 function ymFindVibeControlsRoot() {
@@ -19,6 +20,38 @@ function ymIsVibePageActive() {
 
 function ymFindVibePlayerBar() {
   return document.querySelector('[class*="VibePlayerBar_root"]');
+}
+
+function ymQueryDeep(selector, root) {
+  root = root || document;
+  if (root.querySelector) {
+    var direct = root.querySelector(selector);
+    if (direct) return direct;
+  }
+  var nodes = root.querySelectorAll ? root.querySelectorAll('*') : [];
+  for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i];
+    if (!node.shadowRoot) continue;
+    var found = ymQueryDeep(selector, node.shadowRoot);
+    if (found) return found;
+  }
+  return null;
+}
+
+function ymCollectDeepLinks(root) {
+  var out = [];
+  function walk(node) {
+    if (!node) return;
+    if (node.querySelectorAll) {
+      var links = node.querySelectorAll('a[href]');
+      for (var i = 0; i < links.length; i++) out.push(links[i]);
+    }
+    var children = node.children || [];
+    for (var c = 0; c < children.length; c++) walk(children[c]);
+    if (node.shadowRoot) walk(node.shadowRoot);
+  }
+  walk(root || document);
+  return out;
 }
 
 function ymSetRangeValue(slider, newValue) {

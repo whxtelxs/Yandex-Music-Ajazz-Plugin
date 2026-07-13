@@ -3,7 +3,7 @@
 const { Actions, log } = require('../utils/plugin');
 const { deps } = require('../lib/deps');
 const { addContext, removeContext } = require('../lib/contexts');
-const { checkPlaybackState } = require('../lib/state-sync');
+const { checkPlaybackState, setOptimisticState, requestMediaRefresh } = require('../lib/state-sync');
 
 module.exports = function registerPlaybackActions(plugin) {
     plugin['ym-play-pause'] = new Actions({
@@ -20,6 +20,9 @@ module.exports = function registerPlaybackActions(plugin) {
             try {
                 const result = await deps.yandexMusic.togglePlayback();
                 if (!result) plugin.showAlert(context);
+                else if (typeof result.playing === 'boolean') {
+                    setOptimisticState('playback', result.playing ? 1 : 0);
+                }
             } catch (error) {
                 log.error('Ошибка при переключении воспроизведения:', error);
                 plugin.showAlert(context);
@@ -36,6 +39,7 @@ module.exports = function registerPlaybackActions(plugin) {
             try {
                 const result = await deps.yandexMusic.previousTrack();
                 if (!result) plugin.showAlert(context);
+                else requestMediaRefresh();
             } catch (error) {
                 log.error('Ошибка при переходе к предыдущему треку:', error);
                 plugin.showAlert(context);
@@ -52,6 +56,7 @@ module.exports = function registerPlaybackActions(plugin) {
             try {
                 const result = await deps.yandexMusic.nextTrack();
                 if (!result) plugin.showAlert(context);
+                else requestMediaRefresh();
             } catch (error) {
                 log.error('Ошибка при переходе к следующему треку:', error);
                 plugin.showAlert(context);

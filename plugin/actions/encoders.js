@@ -2,11 +2,20 @@
 
 const { Actions, log } = require('../utils/plugin');
 const { deps } = require('../lib/deps');
+const { createInputCoalescer } = require('../lib/input-coalescer');
+const { setOptimisticState, requestMediaRefresh } = require('../lib/state-sync');
+
+const seekInput = createInputCoalescer((_context, ticks) => deps.yandexMusic.seekRelative(ticks));
+const trackInput = createInputCoalescer((_context, ticks) => {
+    if (ticks === 0) return true;
+    return ticks > 0 ? deps.yandexMusic.nextTrack() : deps.yandexMusic.previousTrack();
+});
 
 async function togglePlaybackOnEncoder(context, errorLabel) {
     try {
         const result = await deps.yandexMusic.togglePlayback();
         if (!result) deps.plugin.showAlert(context);
+        else if (typeof result.playing === 'boolean') setOptimisticState('playback', result.playing ? 1 : 0);
     } catch (error) {
         log.error(errorLabel, error);
         deps.plugin.showAlert(context);
@@ -42,7 +51,7 @@ module.exports = function registerEncoderActions(plugin) {
         const ticks = payload?.ticks || 0;
 
         try {
-            const result = await deps.yandexMusic.seekRelative(ticks);
+            const result = await seekInput.add(context, ticks);
             if (!result) plugin.showAlert(context);
         } catch (error) {
             log.error('Ошибка при перемотке через энкодер:', error);
@@ -56,11 +65,10 @@ module.exports = function registerEncoderActions(plugin) {
         if (ticks === 0) return;
 
         try {
-            const result = ticks > 0
-                ? await deps.yandexMusic.nextTrack()
-                : await deps.yandexMusic.previousTrack();
+            const result = await trackInput.add(context, ticks);
 
             if (!result) plugin.showAlert(context);
+            else requestMediaRefresh();
         } catch (error) {
             log.error('Ошибка при переключении трека через энкодер:', error);
             plugin.showAlert(context);

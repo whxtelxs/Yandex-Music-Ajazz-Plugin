@@ -67,7 +67,7 @@ function ymDetectSonataPlaybackIsPlaying() {
     return false;
   }
 
-  return false;
+  return null;
 }
 
 function ymDetectPlaybackIsPlaying() {

@@ -5,11 +5,12 @@ const { log } = require('../../plugin');
 module.exports = {
   async toggleShuffle() {
     try {
-      const value = await this._evaluateDom('return ymToggleShuffle();');
+      const value = await this._evaluateDom('return ymToggleShuffle();', { priority: 'user' });
       if (value && value.success) {
         if (value.shuffle !== undefined) this.vibeShuffleState = !!value.shuffle;
-        await this.refreshRemoteState();
-        return true;
+        this.remoteState = { ...(this.remoteState || {}), shuffleOn: !!value.shuffle };
+        this.onRemoteStateChange?.(this.remoteState);
+        return value;
       }
       if (value && value.unavailable) {
         log.info('Shuffle недоступен в текущем режиме Vibe');
@@ -23,11 +24,12 @@ module.exports = {
 
   async toggleRepeat() {
     try {
-      const value = await this._evaluateDom('return ymToggleRepeat();');
+      const value = await this._evaluateDom('return ymToggleRepeat();', { priority: 'user' });
       if (value && value.success) {
         if (value.mode !== undefined) this.vibeRepeatMode = value.mode;
-        await this.refreshRemoteState();
-        return true;
+        this.remoteState = { ...(this.remoteState || {}), repeatMode: value.mode };
+        this.onRemoteStateChange?.(this.remoteState);
+        return value;
       }
       return false;
     } catch (err) {
@@ -44,7 +46,7 @@ module.exports = {
           return !!this.remoteState.shuffleOn;
         }
       }
-      const value = await this._evaluateDom('return ymDetectShufflePressed();');
+      const value = await this._evaluateDom('return ymDetectShufflePressed();', { key: 'read-shuffle' });
       if (value && value.ok) {
         this.vibeShuffleState = !!value.shuffle;
         return !!value.shuffle;
@@ -62,7 +64,7 @@ module.exports = {
       if (this.remoteState && this.remoteState.repeatMode !== null && this.remoteState.repeatMode !== undefined) {
         return this.remoteState.repeatMode;
       }
-      const value = await this._evaluateDom('return ymDetectRepeatMode();');
+      const value = await this._evaluateDom('return ymDetectRepeatMode();', { key: 'read-repeat' });
       if (value && value.ok) {
         this.vibeRepeatMode = value.mode;
         return value.mode;

@@ -1,26 +1,63 @@
 'use strict';
 
 const { deps } = require('./deps');
-const { clampTextSize } = require('./helpers');
+const { resolveSetting } = require('./settings');
+const { renderTrackInfoImage, renderTimeImage } = require('./text-render');
+
+const lastImageByContext = new Map();
 
 function getTrackInfoTextSize(context) {
-    const settings = deps.plugin['ym-track-info']?.data?.[context];
-    return clampTextSize(settings?.textSize, 12, 4, 24);
+    return resolveSetting('trackInfoTextSize', {
+        actionKey: 'ym-track-info',
+        context,
+        legacyKey: 'textSize'
+    });
 }
 
-function getTimeTextSize(context) {
-    const settings = deps.plugin['ym-time-total']?.data?.[context];
-    return clampTextSize(settings?.textSize, 6, 3, 12);
+function getTrackInfoFontSize(context) {
+    return resolveSetting('trackInfoFontSize', {
+        actionKey: 'ym-track-info',
+        context,
+        legacyKey: 'fontSize'
+    });
 }
 
-function setTimeTitle(context, current, total) {
-    const textSize = getTimeTextSize(context);
-    const combined = current.padEnd(textSize, ' ') + total;
-    deps.plugin.setTitle(context, combined, 2, textSize);
+function getTimeFontSize(context) {
+    return resolveSetting('timeTotalFontSize', {
+        actionKey: 'ym-time-total',
+        context,
+        legacyKey: 'fontSize'
+    });
+}
+
+function setDisplayImage(context, image) {
+    if (!image || lastImageByContext.get(context) === image) return;
+    lastImageByContext.set(context, image);
+    deps.plugin.setImage(context, image);
+}
+
+function setTrackInfoDisplay(context, text) {
+    setDisplayImage(context, renderTrackInfoImage(text, getTrackInfoFontSize(context)));
+}
+
+function setTimeDisplay(context, current, total) {
+    setDisplayImage(context, renderTimeImage(current, total, getTimeFontSize(context)));
+}
+
+function clearDisplayCache(context) {
+    lastImageByContext.delete(context);
+}
+
+function clearAllDisplayCaches() {
+    lastImageByContext.clear();
 }
 
 module.exports = {
     getTrackInfoTextSize,
-    getTimeTextSize,
-    setTimeTitle
+    getTrackInfoFontSize,
+    getTimeFontSize,
+    setTrackInfoDisplay,
+    setTimeDisplay,
+    clearDisplayCache,
+    clearAllDisplayCaches
 };

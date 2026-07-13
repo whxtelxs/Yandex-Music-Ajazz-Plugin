@@ -2,12 +2,19 @@
 
 const deps = {
     plugin: null,
-    yandexMusic: null
+    yandexMusic: null,
+    settingsServer: null,
+    launcher: null
 };
 
-function initDeps(plugin, yandexMusic) {
+function initDeps(plugin, yandexMusic, launcher = null) {
     deps.plugin = plugin;
     deps.yandexMusic = yandexMusic;
+    deps.launcher = launcher;
 }
 
-module.exports = { deps, initDeps };
+function setSettingsServer(settingsServer) {
+    deps.settingsServer = settingsServer;
+}
+
+module.exports = { deps, initDeps, setSettingsServer };

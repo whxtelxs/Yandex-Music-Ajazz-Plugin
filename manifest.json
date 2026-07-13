@@ -201,6 +201,24 @@
     },
     {
       "Icon": "static/App-logo.png",
+      "Name": "Запуск Yandex Music",
+      "DisableAutomaticStates": true,
+      "States": [
+        {
+          "Image": "static/App-logo.png",
+          "TitleAlignment": "center",
+          "FontSize": "8"
+        }
+      ],
+      "Controllers": [],
+      "UserTitleEnabled": true,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Запускает Яндекс Музыку с портом отладки для управления плагином",
+      "UUID": "com.whxtelxs.streamdock.yandexmusicajazz.ym-launch",
+      "PropertyInspectorPath": "propertyInspector/yandexmusicajazz/index.html"
+    },
+    {
+      "Icon": "static/App-logo.png",
       "Name": "Обложка трека",
       "DisableAutomaticStates": true,
       "States": [
@@ -325,8 +343,8 @@
   "Description": "Плагин для управления Yandex Music через Ajazz.",
   "Category": "Yandex Music",
   "CategoryIcon": "static/App-logo.png",
-  "Version": "1.5.0",
-  "URL": "https://whxtelxs.dev",
+  "Version": "2.0.0",
+  "URL": "https://lisik.dev",
   "OS": [
     {
       "Platform": "mac",

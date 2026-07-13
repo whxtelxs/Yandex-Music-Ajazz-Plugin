@@ -51,7 +51,7 @@ function ymDetectMuteIsMuted() {
     }
     return false;
   }
-  return false;
+  return null;
 }
 
 function ymToggleMute() {
@@ -98,5 +98,15 @@ function ymSetVolume(percent) {
     rawValue: newValue,
     actualValue: parseFloat(volumeSlider.value)
   };
+}
+
+function ymChangeVolume(delta) {
+  var current = ymGetVolume();
+  if (!current.success) return current;
+  var result = ymSetVolume(current.volume + delta);
+  if (result.success) {
+    result.muted = result.volume <= 0;
+  }
+  return result;
 }
 `;

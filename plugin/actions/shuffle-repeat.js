@@ -29,7 +29,6 @@ module.exports = function registerShuffleRepeatActions(plugin) {
                     plugin.showAlert(context);
                     return;
                 }
-                await checkShuffleState();
             } catch (error) {
                 log.error('Ошибка при переключении случайного порядка:', error);
                 plugin.showAlert(context);
@@ -55,7 +54,6 @@ module.exports = function registerShuffleRepeatActions(plugin) {
                     plugin.showAlert(context);
                     return;
                 }
-                await checkRepeatState();
             } catch (error) {
                 log.error('Ошибка при переключении повтора:', error);
                 plugin.showAlert(context);

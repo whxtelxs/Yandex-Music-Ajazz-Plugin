@@ -2,19 +2,37 @@
 
 const { Actions, log } = require('../utils/plugin');
 const { deps } = require('../lib/deps');
-const { clampVolumeStep } = require('../lib/helpers');
 const { addContext, removeContext } = require('../lib/contexts');
+const { setOptimisticState } = require('../lib/state-sync');
+const { createInputCoalescer } = require('../lib/input-coalescer');
+const { resolveSetting } = require('../lib/settings');
 
-function createVolumeKeyActions(deltaSign) {
+function getVolumeStep(context, actionKey) {
+    return resolveSetting('volumeStep', {
+        actionKey,
+        context,
+        legacyKey: 'volumeStep'
+    });
+}
+
+const volumeInput = createInputCoalescer(async (_context, delta) => {
+    const result = await deps.yandexMusic.changeVolume(delta);
+    if (result?.success && typeof result.muted === 'boolean') {
+        setOptimisticState('mute', result.muted ? 1 : 0);
+    }
+    return result;
+});
+
+function createVolumeKeyActions(deltaSign, actionKey) {
     return {
         default: { volumeStep: 5 },
         _didReceiveSettings(data) {
             this.data[data.context] = Object.assign({ ...this.default }, data.payload.settings);
         },
         async keyUp({ context }) {
-            const step = clampVolumeStep(this.data[context]?.volumeStep);
+            const step = getVolumeStep(context, actionKey);
             try {
-                const result = await deps.yandexMusic.changeVolume(deltaSign * step);
+                const result = await volumeInput.add(context, deltaSign * step);
                 if (!result) deps.plugin.showAlert(context);
             } catch (error) {
                 log.error('Ошибка при изменении громкости кнопкой:', error);
@@ -24,26 +42,20 @@ function createVolumeKeyActions(deltaSign) {
     };
 }
 
-async function syncVolumeEncoderMuteState(context) {
-    await new Promise(r => setTimeout(r, 100));
-    const muted = await deps.yandexMusic.getMuteIsMuted();
-    if (muted !== null) {
-        deps.plugin.setState(context, muted ? 1 : 0);
-    }
-}
-
 async function toggleMuteOnEncoder(context) {
     const result = await deps.yandexMusic.toggleMute();
     if (result) {
-        await syncVolumeEncoderMuteState(context);
+        if (typeof result.muted === 'boolean') {
+            setOptimisticState('mute', result.muted ? 1 : 0);
+        }
     } else {
         deps.plugin.showAlert(context);
     }
 }
 
 module.exports = function registerVolumeActions(plugin) {
-    plugin['ym-volume-add'] = new Actions(createVolumeKeyActions(1));
-    plugin['ym-volume-remove'] = new Actions(createVolumeKeyActions(-1));
+    plugin['ym-volume-add'] = new Actions(createVolumeKeyActions(1, 'ym-volume-add'));
+    plugin['ym-volume-remove'] = new Actions(createVolumeKeyActions(-1, 'ym-volume-remove'));
 
     plugin['ym-volume-encoder'] = new Actions({
         default: { volumeStep: 5 },
@@ -92,16 +104,15 @@ module.exports = function registerVolumeActions(plugin) {
                 return;
             }
 
-            const volumeStep = clampVolumeStep(this.data[context]?.volumeStep);
+            const volumeStep = getVolumeStep(context, 'ym-volume-encoder');
             const delta = ticks * volumeStep;
 
             try {
                 log.info(`Изменяем громкость на ${delta}%`);
-                const result = await deps.yandexMusic.changeVolume(delta);
+                const result = await volumeInput.add(context, delta);
                 if (result) {
-                    const muted = await deps.yandexMusic.getMuteIsMuted();
-                    if (muted !== null) {
-                        plugin.setState(context, muted ? 1 : 0);
+                    if (typeof result.muted === 'boolean') {
+                        setOptimisticState('mute', result.muted ? 1 : 0);
                     }
                 } else {
                     log.error('changeVolume вернул false');

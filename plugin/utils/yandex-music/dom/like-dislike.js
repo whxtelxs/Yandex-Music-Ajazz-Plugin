@@ -59,7 +59,7 @@ function ymDetectLikeIsLiked() {
   }
   var sonataLike = ymFindSonataLikeButton();
   if (sonataLike) return ymIsButtonLiked(sonataLike);
-  return false;
+  return null;
 }
 
 function ymClickLike() {
@@ -67,19 +67,22 @@ function ymClickLike() {
     if (ymIsVibePageActive()) {
       var vibeLike = ymFindVibeLikeButton();
       if (vibeLike) {
+        var vibeWasLiked = ymIsButtonLiked(vibeLike);
         vibeLike.click();
-        return { success: true, message: 'Vibe: лайк' };
+        return { success: true, message: 'Vibe: лайк', liked: !vibeWasLiked };
       }
     }
     var sonataLike = ymFindSonataLikeButton();
     if (sonataLike) {
+      var sonataWasLiked = ymIsButtonLiked(sonataLike);
       sonataLike.click();
-      return { success: true, message: 'Sonata: лайк' };
+      return { success: true, message: 'Sonata: лайк', liked: !sonataWasLiked };
     }
     var vibeFallback = ymFindVibeLikeButton();
     if (vibeFallback) {
+      var fallbackWasLiked = ymIsButtonLiked(vibeFallback);
       vibeFallback.click();
-      return { success: true, message: 'Vibe: лайк' };
+      return { success: true, message: 'Vibe: лайк', liked: !fallbackWasLiked };
     }
     return { success: false, message: 'Кнопка лайка не найдена' };
   } catch (err) {

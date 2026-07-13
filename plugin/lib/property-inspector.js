@@ -4,7 +4,7 @@ const { log, Actions } = require('../utils/plugin');
 const { deps } = require('./deps');
 
 const PI_COMMANDS = {
-    checkConnection(context, action) {
+    checkConnection(_message, context, action) {
         deps.yandexMusic.checkConnection().then(isConnected => {
             log.info('Результат проверки соединения:', isConnected ? 'подключено' : 'не подключено');
             deps.plugin.sendToPropertyInspector({
@@ -24,6 +24,7 @@ const PI_COMMANDS = {
 
         log.info(`Изменение порта на ${newPort}`);
         deps.plugin.setGlobalSettings({ debugPort: newPort });
+        deps.launcher?.setDebugPort(newPort);
 
         deps.yandexMusic.setPort(newPort).then(success => {
             log.info(`Результат изменения порта: ${success ? 'успешно' : 'ошибка'}`);
@@ -34,56 +35,21 @@ const PI_COMMANDS = {
             }, context, action);
         });
     },
-    togglePlayback() {
-        deps.yandexMusic.togglePlayback().then(result => {
-            log.info('Результат переключения воспроизведения:', result);
-        });
+    getSettingsPanelInfo(_message, context, action) {
+        const info = deps.settingsServer?.getInfo() || { available: false, port: null };
+        deps.plugin.sendToPropertyInspector({
+            command: 'settingsPanelInfo',
+            available: info.available,
+            port: info.port
+        }, context, action);
     },
-    previousTrack() {
-        deps.yandexMusic.previousTrack().then(result => {
-            log.info('Результат перехода к предыдущему треку:', result);
-        });
-    },
-    nextTrack() {
-        deps.yandexMusic.nextTrack().then(result => {
-            log.info('Результат перехода к следующему треку:', result);
-        });
-    },
-    likeTrack() {
-        deps.yandexMusic.likeTrack().then(result => {
-            log.info('Результат установки лайка:', result);
-        });
-    },
-    dislikeTrack() {
-        deps.yandexMusic.dislikeTrack().then(result => {
-            log.info('Результат установки дизлайка:', result);
-        });
-    },
-    toggleMute() {
-        deps.yandexMusic.toggleMute().then(result => {
-            log.info('Результат переключения звука:', result);
-        });
-    },
-    changeVolume(message) {
-        if (typeof message.payload.delta === 'number') {
-            deps.yandexMusic.changeVolume(message.payload.delta).then(result => {
-                log.info('Результат изменения громкости:', result);
-            });
-        }
-    },
-    setVolume(message) {
-        if (typeof message.payload.volume === 'number') {
-            deps.yandexMusic.setVolume(message.payload.volume).then(result => {
-                log.info('Результат установки громкости:', result);
-            });
-        }
-    },
-    seekRelative(message) {
-        if (typeof message.payload.ticks === 'number') {
-            deps.yandexMusic.seekRelative(message.payload.ticks).then(result => {
-                log.info('Результат перемотки:', result);
-            });
-        }
+    openSettingsPanel(_message, context, action) {
+        const opened = deps.settingsServer?.open() || false;
+        deps.plugin.sendToPropertyInspector({
+            command: 'settingsPanelInfo',
+            available: opened,
+            port: deps.settingsServer?.port || null
+        }, context, action);
     }
 };
 
@@ -94,21 +60,12 @@ function handlePropertyInspectorMessage(message) {
 
     log.info('Выполняем команду Property Inspector:', command, message.payload);
 
-    if (command === 'changePort' || command === 'changeVolume' || command === 'setVolume' || command === 'seekRelative') {
-        handler(message, message.context, message.action);
-    } else if (command === 'checkConnection') {
-        handler(message.context, message.action);
-    } else {
-        handler();
-    }
+    handler(message, message.context, message.action);
 }
 
 function registerPropertyInspector(plugin) {
-    plugin.ws.on('message', (data) => {
+    plugin.onPluginMessage((message) => {
         try {
-            const message = JSON.parse(data.toString());
-            log.info('Получено сообщение от StreamDeck:', message.event, message.action);
-
             if (message.event === 'sendToPlugin' && message.payload?.command) {
                 log.info('Получена команда от Property Inspector:', message.payload.command, message.payload);
                 handlePropertyInspectorMessage(message);

@@ -4,12 +4,12 @@ const { Actions, log } = require('../utils/plugin');
 const { sendLogToPropertyInspector } = require('../lib/helpers');
 const { addContext, removeContext, hasContext, buttonContexts } = require('../lib/contexts');
 const { appState } = require('../lib/app-state');
-const { setTimeTitle } = require('../lib/display');
+const { setTimeDisplay } = require('../lib/display');
 const { checkTimeState } = require('../lib/state-sync');
 
 module.exports = function registerTimeTotalAction(plugin) {
     plugin['ym-time-total'] = new Actions({
-        default: { textSize: 6 },
+        default: { fontSize: 14 },
         _didReceiveSettings(data) {
             this.data[data.context] = Object.assign({ ...this.default }, data.payload.settings);
             if (buttonContexts.timeTotal.includes(data.context)) {
@@ -27,7 +27,7 @@ module.exports = function registerTimeTotalAction(plugin) {
                 appState.lastTimeInfo = null;
             }
 
-            setTimeTitle(context, '0:00', '0:00');
+            setTimeDisplay(context, '0:00', '0:00');
             await checkTimeState();
         },
         _willDisappear({ context }) {

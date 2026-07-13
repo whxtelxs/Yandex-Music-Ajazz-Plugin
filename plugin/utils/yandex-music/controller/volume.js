@@ -6,11 +6,11 @@ module.exports = {
   async toggleMute() {
     try {
       log.info('Определение состояния звука и переключение');
-      const value = await this._evaluateDom('return ymToggleMute();');
+      const value = await this._evaluateDom('return ymToggleMute();', { priority: 'user' });
       if (value && value.success) {
         log.info(value.message);
         log.info(`Звук был ${value.wasMuted ? 'выключен' : 'включен'}`);
-        return true;
+        return { success: true, muted: !value.wasMuted };
       }
       log.error('Не удалось переключить звук:', value?.message);
       return false;
@@ -22,7 +22,7 @@ module.exports = {
 
   async getMuteIsMuted() {
     try {
-      const value = await this._evaluateDom('return ymDetectMuteIsMuted();');
+      const value = await this._evaluateDom('return ymDetectMuteIsMuted();', { key: 'read-mute' });
       if (value === null || value === undefined) return null;
       return !!value;
     } catch (err) {
@@ -33,7 +33,7 @@ module.exports = {
 
   async getVolume() {
     try {
-      const value = await this._evaluateDom('return ymGetVolume();');
+      const value = await this._evaluateDom('return ymGetVolume();', { key: 'read-volume' });
       if (value && value.success) {
         log.info(`Получена громкость: ${value.volume}% (raw: ${value.rawValue}, max: ${value.max})`);
         return value.volume;
@@ -50,7 +50,7 @@ module.exports = {
     try {
       const clampedPercent = Math.max(0, Math.min(100, volumePercent));
       log.info(`Установка громкости: ${clampedPercent}%`);
-      const value = await this._evaluateDom(`return ymSetVolume(${clampedPercent});`);
+      const value = await this._evaluateDom(`return ymSetVolume(${clampedPercent});`, { priority: 'user' });
       if (value && value.success) {
         log.info(`Громкость установлена: ${value.volume}% (raw: ${value.rawValue}, actual: ${value.actualValue})`);
         return true;
@@ -65,15 +65,13 @@ module.exports = {
 
   async changeVolume(delta) {
     try {
-      const currentVolume = await this.getVolume();
-      if (currentVolume === null) {
-        log.error('Не удалось получить текущую громкость');
+      const safeDelta = Math.max(-100, Math.min(100, Number(delta) || 0));
+      const value = await this._evaluateDom(`return ymChangeVolume(${safeDelta});`, { priority: 'user' });
+      if (!value?.success) {
+        log.error('Не удалось изменить громкость:', value?.message);
         return false;
       }
-
-      const newVolume = Math.max(0, Math.min(100, currentVolume + delta));
-      log.info(`Изменение громкости: ${currentVolume}% -> ${newVolume}% (delta: ${delta})`);
-      return await this.setVolume(newVolume);
+      return value;
     } catch (err) {
       log.error('Ошибка при изменении громкости:', err);
       return false;

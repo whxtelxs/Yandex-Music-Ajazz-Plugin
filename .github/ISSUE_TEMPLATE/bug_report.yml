@@ -1,0 +1,96 @@
+name: Сообщить о баге
+description: Сообщите об ошибке в работе плагина Yandex Music для Ajazz/StreamDock
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: dropdown
+    id: plugin_version
+    attributes:
+      label: Версия плагина
+      description: Какую версию плагина вы используете?
+      options:
+        - 2.0.0
+        - v1.7.0
+        - v1.6.0
+        - v1.5.0
+        - v1.4.0
+        - v1.3.0
+        - v1.2.0
+        - v1.1.0
+        - v1.0.0
+        - Другая/не знаю
+    validations:
+      required: true
+
+  - type: dropdown
+    id: bug_type
+    attributes:
+      label: Тип проблемы
+      options:
+        - Визуальный
+        - Запуск/подключение
+        - Производительность
+        - Синхронизация состояния
+        - Управление воспроизведением
+        - Настройки
+        - Discord
+        - Обновления
+        - Другое
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Устройство
+      description: Модель устройства Ajazz / StreamDock
+      placeholder: "Например: Ajazz AKP03E"
+    validations:
+      required: true
+
+  - type: input
+    id: host_version
+    attributes:
+      label: Версия ПО
+      description: Версия ПО из настроек оборудования StreamDock (Шестеренка - Версия ПО)
+      placeholder: "Например: 3.10.200.0420"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги для воспроизведения
+      description: Как воспроизвести проблему?
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Ожидаемое поведение
+      description: Что должно было произойти?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Фактическое поведение
+      description: Что произошло на самом деле?
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Дополнительная информация
+      description: Логи, скриншоты, контекст (необязательно)
+      render: markdown
+    validations:
+      required: false

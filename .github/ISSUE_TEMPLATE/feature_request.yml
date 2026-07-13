@@ -1,0 +1,29 @@
+name: Предложение по улучшению
+description: Предложите новую функцию или улучшение плагина Yandex Music для Ajazz/StreamDock
+title: "[Suggestion]: "
+labels:
+  - enhancement
+body:
+  - type: dropdown
+    id: suggestion_type
+    attributes:
+      label: Тип предложения
+      options:
+        - Новая фича
+        - Улучшение существующего
+        - UX/интерфейс
+        - Настройки
+        - Производительность
+        - Документация
+        - Другое
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Описание
+      description: Подробно опишите ваше предложение
+      placeholder: Что вы хотите добавить или изменить и зачем?
+    validations:
+      required: true

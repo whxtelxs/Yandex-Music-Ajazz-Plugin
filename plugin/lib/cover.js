@@ -4,9 +4,12 @@ const https = require('https');
 const http = require('http');
 const { log } = require('../utils/plugin');
 const { deps } = require('./deps');
-const { buttonContexts } = require('./contexts');
 const { appState } = require('./app-state');
 const { sendLogToPropertyInspector } = require('./helpers');
+
+const coverCache = new Map();
+const coverRequests = new Map();
+const MAX_CACHE_ENTRIES = 6;
 
 function downloadImageAsDataUrl(imageUrl) {
     const client = imageUrl.startsWith('https:') ? https : http;
@@ -34,29 +37,27 @@ function downloadImageAsDataUrl(imageUrl) {
     });
 }
 
-async function downloadAndSetImageAsDataUrl(imageUrl) {
-    try {
-        sendLogToPropertyInspector(`Скачивание изображения с URL: ${imageUrl}`, 'info');
-        const dataUrl = await downloadImageAsDataUrl(imageUrl);
-        sendLogToPropertyInspector(`Создан data URL, длина: ${dataUrl.length} символов`, 'info');
+async function getCoverDataUrl(imageUrl) {
+    if (coverCache.has(imageUrl)) return coverCache.get(imageUrl);
+    if (coverRequests.has(imageUrl)) return coverRequests.get(imageUrl);
 
-        buttonContexts.cover.forEach((context, index) => {
-            sendLogToPropertyInspector(`Установка data URL для кнопки ${index + 1}`, 'info');
-            deps.plugin.setImage(context, dataUrl);
-        });
-
-        sendLogToPropertyInspector('Изображение установлено через data URL', 'info');
-        return dataUrl;
-    } catch (error) {
-        sendLogToPropertyInspector(`Ошибка в downloadAndSetImageAsDataUrl: ${error.message}`, 'error');
-        log.error('Ошибка в downloadAndSetImageAsDataUrl:', error);
-    }
+    const request = downloadImageAsDataUrl(imageUrl)
+        .then(dataUrl => {
+            coverCache.set(imageUrl, dataUrl);
+            while (coverCache.size > MAX_CACHE_ENTRIES) {
+                coverCache.delete(coverCache.keys().next().value);
+            }
+            return dataUrl;
+        })
+        .finally(() => coverRequests.delete(imageUrl));
+    coverRequests.set(imageUrl, request);
+    return request;
 }
 
 async function downloadAndSetImageForContext(imageUrl, context) {
     try {
         sendLogToPropertyInspector(`Скачивание изображения для контекста ${context}`, 'info');
-        const dataUrl = await downloadImageAsDataUrl(imageUrl);
+        const dataUrl = await getCoverDataUrl(imageUrl);
         sendLogToPropertyInspector(`Установка изображения для контекста ${context}`, 'info');
         deps.plugin.setImage(context, dataUrl);
         return dataUrl;
@@ -95,7 +96,7 @@ async function restoreCoverForContext(context) {
 }
 
 module.exports = {
-    downloadAndSetImageAsDataUrl,
+    getCoverDataUrl,
     downloadAndSetImageForContext,
     restoreCoverForContext
 };
