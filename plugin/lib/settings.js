@@ -4,7 +4,8 @@ const { deps } = require('./deps');
 const { resolveDiscordAppId } = require('./discord/constants');
 
 const SETTINGS_SCHEMA = Object.freeze({
-    debugPort: { defaultValue: 9222, min: 1, max: 65535 },
+    musicApp: { defaultValue: 'spotify', type: 'enum', values: ['spotify', 'yandex'] },
+    debugPort: { defaultValue: 9233, min: 1, max: 65535 },
     volumeStep: { defaultValue: 5, min: 1, max: 99 },
     trackInfoTextSize: { defaultValue: 12, min: 4, max: 24 },
     trackInfoFontSize: { defaultValue: 14, min: 8, max: 28 },
@@ -20,6 +21,7 @@ function hasOwn(object, key) {
 function clampSetting(key, value) {
     const schema = SETTINGS_SCHEMA[key];
     if (!schema) return undefined;
+    if (schema.type === 'enum') return schema.values.includes(value) ? value : schema.defaultValue;
     if (schema.type === 'boolean') return !!value;
     const number = parseInt(value, 10);
     if (Number.isNaN(number)) return schema.defaultValue;

@@ -230,7 +230,7 @@ class SettingsServer {
         const assets = {
             '/assets/app.js': [path.join(this.rootDir, 'dashboard', 'app.js'), 'text/javascript; charset=utf-8'],
             '/assets/tailwind.css': [path.join(this.rootDir, 'utils', 'tailwind.css'), 'text/css; charset=utf-8'],
-            '/assets/logo.png': [path.resolve(this.rootDir, '..', 'static', 'App-logo.png'), 'image/png']
+            '/assets/logo.png': [path.resolve(this.rootDir, '..', 'static', 'spotify_yandex.png'), 'image/png']
         };
         const asset = assets[requestUrl.pathname];
         if (!asset) {
@@ -350,6 +350,11 @@ class SettingsServer {
             if (message.type === 'updateSettings') {
                 const patch = sanitizeSettingsPatch(message.settings);
                 const previous = getSettingsSnapshot();
+                if (Object.prototype.hasOwnProperty.call(patch, 'musicApp')
+                    && patch.musicApp !== previous.musicApp) {
+                    await this.yandexMusic.setApp(patch.musicApp);
+                    patch.debugPort = patch.musicApp === 'yandex' ? 9222 : 9233;
+                }
                 const merged = this.plugin.setGlobalSettings(patch);
                 if (Object.prototype.hasOwnProperty.call(patch, 'debugPort')
                     && patch.debugPort !== previous.debugPort) {

@@ -4,6 +4,7 @@ const params = new URLSearchParams(window.location.search);
 const token = params.get('token');
 const panels = ['connection', 'volume', 'text', 'discord', 'debug', 'updates', 'github'];
 const fields = {
+    musicApp: { element: document.getElementById('musicApp') },
     debugPort: { element: document.getElementById('debugPort'), min: 1, max: 65535 },
     volumeStep: { element: document.getElementById('volumeStep'), min: 1, max: 99 },
     trackInfoTextSize: { element: document.getElementById('trackInfoTextSize'), min: 4, max: 24 },
@@ -102,9 +103,9 @@ function updateOutputs() {
 
 function collectSettings() {
     return {
-        ...Object.fromEntries(Object.entries(fields).map(([key, field]) => [
+        ...Object.fromEntries(Object.entries(fields).filter(([key]) => key !== 'debugPort').map(([key, field]) => [
             key,
-            clamp(field.element.value, field.min, field.max)
+            field.element.tagName === 'SELECT' ? field.element.value : clamp(field.element.value, field.min, field.max)
         ])),
         debugMode: !!debugModeInput?.checked,
         discordRpcEnabled: !!discordRpcEnabledInput?.checked
@@ -114,7 +115,11 @@ function collectSettings() {
 function applySettings(settings) {
     applyingServerSettings = true;
     for (const [key, field] of Object.entries(fields)) {
-        if (settings[key] !== undefined) field.element.value = clamp(settings[key], field.min, field.max);
+        if (settings[key] !== undefined) {
+            field.element.value = field.element.tagName === 'SELECT'
+                ? settings[key]
+                : clamp(settings[key], field.min, field.max);
+        }
     }
     if (debugModeInput && settings.debugMode !== undefined) {
         debugModeInput.checked = !!settings.debugMode;
@@ -198,7 +203,7 @@ function getDebugConsoleEmptyText() {
 function getLaunchResultText(message) {
     if (message.message) return message.message;
     if (message.adjusted) return `Запущено на порту ${message.port} (порт был изменён из-за конфликта)`;
-    return 'Яндекс Музыка запущена';
+    return 'Приложение запущено';
 }
 
 function getSaveResultToast(message) {
@@ -355,7 +360,7 @@ function getMusicConnectionPill(connected) {
 
 function getActivePortHint(connection) {
     if (!connection.activePort || !connection.portMismatch) return '';
-    return `Яндекс Музыка запущена на порту ${connection.activePort} (в настройках: ${connection.debugPort})`;
+    return `Активный CDP-порт: ${connection.activePort}`;
 }
 
 function renderConnectionInfo(connection) {
@@ -455,6 +460,10 @@ function connect() {
 }
 
 for (const field of Object.values(fields)) {
+    if (field.element.tagName === 'SELECT') {
+        field.element.addEventListener('change', saveSettings);
+        continue;
+    }
     if (field.element.type === 'range') {
         field.element.addEventListener('input', updateOutputs);
         field.element.addEventListener('change', saveSettings);

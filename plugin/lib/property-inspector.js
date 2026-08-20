@@ -79,7 +79,7 @@ function registerPropertyInspector(plugin) {
         log.info('Отправка сообщения в Property Inspector:', payload);
 
         if (!action) {
-            action = Actions.actions[context] || 'com.whxtelxs.streamdock.yandexmusicajazz.demo';
+            action = Actions.actions[context] || 'com.whxtelxs.streamdock.spotifymusic.demo';
         }
 
         this.ws.send(JSON.stringify({

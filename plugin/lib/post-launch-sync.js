@@ -16,7 +16,7 @@ function buildLaunchMessage(result) {
     if (result.adjusted) {
         return `Запущено на порту ${result.port} (порт был изменён из-за конфликта)`;
     }
-    return 'Яндекс Музыка запущена';
+    return deps.yandexMusic.app === 'yandex' ? 'Яндекс Музыка запущена' : 'Spotify запущен';
 }
 
 async function connectWithRetries() {

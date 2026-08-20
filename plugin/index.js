@@ -2,8 +2,7 @@
 
 const path = require('path');
 const { Plugins, log } = require('./utils/plugin');
-const yandexMusic = require('./utils/yandex-music');
-const launcher = require('./utils/yandex-music-launcher');
+const { controller: yandexMusic, launcher } = require('./utils/music-controller');
 const { initDeps, setSettingsServer } = require('./lib/deps');
 const { syncRunningDebugPort } = require('./lib/debug-port-sync');
 const { registerGlobalSettings } = require('./lib/global-settings');
@@ -29,7 +28,6 @@ const { createDiscordPresenceService } = require('./lib/discord');
 
 const plugin = new Plugins('demo');
 initDeps(plugin, yandexMusic, launcher);
-launcher.setDebugPort(9222);
 
 let settingsServer;
 let lifecycle;

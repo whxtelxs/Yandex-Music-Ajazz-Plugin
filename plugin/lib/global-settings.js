@@ -9,11 +9,23 @@ const { syncRunningDebugPort } = require('./debug-port-sync');
 
 function registerGlobalSettings(plugin, discordPresence) {
     plugin.didReceiveGlobalSettings = async ({ payload: { settings } }) => {
-        const normalized = mergeGlobalSettings(plugin.constructor.globalSettings || {}, settings || {});
+        const incomingSettings = { ...(settings || {}) };
+        if (Number(incomingSettings.debugPort) === 9222) {
+            incomingSettings.debugPort = 9233;
+            log.info('Перенос старого Spotify CDP порта 9222 на 9233');
+        }
+        const normalized = mergeGlobalSettings(plugin.constructor.globalSettings || {}, incomingSettings);
         plugin.constructor.globalSettings = normalized;
         log.info('didReceiveGlobalSettings', normalized);
 
-        const savedPort = getSettingsSnapshot().debugPort;
+        await deps.yandexMusic.setApp(normalized.musicApp);
+        const automaticPort = normalized.musicApp === 'yandex' ? 9222 : 9233;
+        if (normalized.debugPort !== automaticPort) {
+            normalized.debugPort = automaticPort;
+            plugin.constructor.globalSettings = normalized;
+        }
+
+        const savedPort = automaticPort;
         if (Number.isNaN(savedPort) || savedPort < 1 || savedPort > 65535) {
             log.error('Некорректный сохранённый CDP порт:', normalized?.debugPort);
             return;

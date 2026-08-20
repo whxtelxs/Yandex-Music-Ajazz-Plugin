@@ -1,9 +1,9 @@
 {
-  "Name": "Yandex Music Ajazz Plugin by whxtelxs",
-  "Description": "Плагин для управления Yandex Music через Ajazz.",
-  "Category": "Yandex Music by whxtelxs",
+  "Name": "Spotify Ajazz Plugin by whxtelxs",
+  "Description": "Плагин для управления Spotify через Ajazz.",
+  "Category": "Spotify by whxtelxs",
   "com.whxtelxs.streamdock.yandexmusicajazz": {
-    "Name": "Yandex Music",
+    "Name": "Spotify",
     "Tooltip": "Управление Yandex Music"
   },
   "Localization": {

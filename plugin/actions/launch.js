@@ -1,16 +1,26 @@
 'use strict';
 
 const { Actions, log } = require('../utils/plugin');
-const { launchYandexMusicApp } = require('../lib/post-launch-sync');
+const { deps } = require('../lib/deps');
+
+async function launchApp(app) {
+    await deps.yandexMusic?.setApp(app);
+    const result = await deps.launcher?.ensureYandexMusicRunning?.();
+    if (!result?.success) return false;
+    await deps.yandexMusic?.setPort(result.port);
+    deps.yandexMusic?.requestReconnect?.();
+    return true;
+}
 
 module.exports = function registerLaunchAction(plugin) {
-    plugin['ym-launch'] = new Actions({
+    const createLaunchAction = (app, label) => new Actions({
         default: {},
-        keyUp() {
-            log.info('Нажата кнопка запуска Яндекс Музыки');
-            launchYandexMusicApp({ source: 'launch-button' }).catch(error => {
-                log.error('Ошибка фонового запуска Яндекс Музыки:', error);
-            });
+        async keyUp({ context }) {
+            log.info(`Нажата кнопка запуска ${label}`);
+            if (!await launchApp(app)) plugin.showAlert(context);
         }
     });
+
+    plugin['ym-launch-spotify'] = createLaunchAction('spotify', 'Spotify');
+    plugin['ym-launch-yandex'] = createLaunchAction('yandex', 'Яндекс Музыки');
 };

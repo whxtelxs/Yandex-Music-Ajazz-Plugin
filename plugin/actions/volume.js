@@ -85,19 +85,10 @@ module.exports = function registerVolumeActions(plugin) {
                 plugin.showAlert(context);
             }
         },
-        async dialDown({ context, payload }) {
-            log.info('YM Volume Encoder dialDown:', context, JSON.stringify(payload));
-            try {
-                await toggleMuteOnEncoder(context);
-            } catch (error) {
-                log.error('Ошибка при переключении звука через энкодер:', error);
-                plugin.showAlert(context);
-            }
-        },
         async dialRotate({ context, payload }) {
             log.info('YM Volume Encoder dialRotate:', context, JSON.stringify(payload));
 
-            const ticks = payload?.ticks || 0;
+            const ticks = Number(payload?.ticks ?? payload?.delta ?? payload?.rotation ?? 0);
             log.info(`Тики вращения: ${ticks}`);
             if (ticks === 0) {
                 log.info('Тики равны 0, пропускаем');

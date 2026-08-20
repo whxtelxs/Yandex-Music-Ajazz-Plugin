@@ -6,7 +6,7 @@ const path = require('path');
 
 const PLUGIN_MARKER = {
     author: 'whxtelxs',
-    actionPrefix: 'com.whxtelxs.streamdock.yandexmusicajazz.'
+    actionPrefix: 'com.whxtelxs.streamdock.spotifymusic.'
 };
 
 function readManifest(dir) {

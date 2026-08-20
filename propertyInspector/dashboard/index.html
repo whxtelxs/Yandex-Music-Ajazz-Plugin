@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="dark">
-    <title>Yandex Music Ajazz Plugin</title>
+    <title>Spotify / Yandex Music Ajazz Plugin</title>
     <link href="/assets/tailwind.css" rel="stylesheet">
 </head>
 <body class="app-body">
@@ -18,7 +18,7 @@
                     <img src="/assets/logo.png" alt="" class="cover-image">
                 </div>
                 <div class="sidebar-brand-text">
-                    <p class="sidebar-title">Yandex Music</p>
+                    <p class="sidebar-title">Spotify / Yandex Music</p>
                     <p class="sidebar-subtitle">Ajazz Plugin</p>
                 </div>
             </div>
@@ -35,6 +35,7 @@
 
             <div class="sidebar-footer">
                 <a href="https://github.com/whxtelxs/Yandex-Music-Ajazz-Plugin" class="sidebar-credit" target="_blank" rel="noopener noreferrer">создано с ❤️ whxtelxs</a>
+                <a href="https://github.com/Vallhant" class="sidebar-credit" target="_blank" rel="noopener noreferrer">добавлен Spotify · Vallhant</a>
             </div>
         </aside>
 
@@ -45,12 +46,16 @@
                     <span id="musicStatus" class="status-pill status-pill-neutral is-hidden" aria-hidden="true"></span>
                 </header>
                 <div class="view-card">
-                    <label for="debugPort" class="field-label">Порт отладки</label>
-                    <input id="debugPort" class="field-input" type="number" inputmode="numeric" min="1" max="65535" value="9222">
-                    <p class="field-hint">Параметр <span class="mono-hint">--remote-debugging-port</span> при запуске Яндекс Музыки</p>
+                    <label for="musicApp" class="field-label">Приложение</label>
+                    <select id="musicApp" class="field-input">
+                        <option value="spotify">Spotify</option>
+                        <option value="yandex">Яндекс Музыка</option>
+                    </select>
+                    <input id="debugPort" type="hidden" value="9233">
+                    <p class="field-hint">Порт выбирается автоматически: Spotify — `9233`, Яндекс Музыка — `9222`.</p>
                     <p id="activePortInfo" class="field-hint is-hidden"></p>
                     <button id="launchAppBtn" type="button" class="btn-accent">
-                        Запустить Yandex Music
+                        Запустить выбранное приложение
                     </button>
                     <button id="checkConnectionBtn" type="button" class="btn-accent btn-accent-outline">
                         Проверить соединение

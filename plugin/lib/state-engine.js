@@ -9,7 +9,7 @@ const { getTrackInfoTextSize, setTrackInfoDisplay, setTimeDisplay, clearAllDispl
 const { getCoverDataUrl } = require('./cover');
 const { parseTime, formatTime, projectTime } = require('./time-utils');
 
-const DEFAULT_COVER_IMAGE = 'static/App-logo.png';
+const DEFAULT_COVER_IMAGE = 'static/info.png';
 const DISCONNECTED_TRACK_TEXT = 'Нет соединения';
 
 const POLL_MS = {

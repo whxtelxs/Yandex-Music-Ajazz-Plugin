@@ -132,7 +132,7 @@ function notifyIfNeeded() {
         : (info.pageUrl || null);
 
     tryWindowsNotification(
-        'Yandex Music Ajazz',
+        'Yandex Music / Spotify Ajazz',
         `Доступна версия ${info.latestVersion}. Откройте настройки и перейдите к релизу.`,
         clickUrl
     );
