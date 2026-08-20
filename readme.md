@@ -129,6 +129,13 @@ C:\Users\USERNAME\AppData\Roaming\HotSpot\StreamDock\plugins
 
 > ⚠️ Для Spotify используется `9233`, для Яндекс Музыки `9222`. При использовании одного плагина порт выбирается автоматически. При использовании двух плагинов оставьте оба приложения на своих отдельных портах.
 
+## Как выглядит
+
+<img width="1201" height="802" alt="image" src="https://github.com/user-attachments/assets/5c972c7d-7cef-4f13-928e-f51d946960d5" />
+<img width="1202" height="832" alt="image" src="https://github.com/user-attachments/assets/c5539847-5252-42a9-8514-77d746d95e48" />
+<img width="2546" height="1300" alt="image" src="https://github.com/user-attachments/assets/351503f4-dfbb-4ac2-8c54-2c9bf3656204" />
+
+
 ## Автор и оригинальный репозиторий
 
 Автор текущей адаптации: [Vallhant](https://github.com/Vallhant).
