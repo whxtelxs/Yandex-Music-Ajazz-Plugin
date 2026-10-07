@@ -18,7 +18,7 @@ module.exports = {
       });
       if (generation !== this._clientGeneration || client !== this.client) return null;
       if (result.exceptionDetails) {
-        throw new Error(result.exceptionDetails.text || 'DOM evaluation failed');
+        throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text || 'DOM evaluation failed');
       }
       return result.result?.value ?? null;
     }, { priority, key });
@@ -79,7 +79,7 @@ module.exports = {
     await client.Page.addScriptToEvaluateOnNewDocument({ source: script });
     const result = await client.Runtime.evaluate({ expression: script, returnByValue: false });
     if (result.exceptionDetails) {
-      throw new Error(result.exceptionDetails.text || 'Не удалось установить DOM runtime');
+      throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text || 'Не удалось установить DOM runtime');
     }
     this._observerSetup = true;
     log.info('Наблюдатель состояния Yandex Music установлен');

@@ -15,7 +15,7 @@ function ymFindVibeSkipButton(root, direction) {
   if (direction === 'previous') {
     return root.querySelector('button[aria-label="Предыдущая песня"]')
       || (function() {
-        var icon = root.querySelector('use[href*="previous_xs"], use[xlink\\:href*="previous_xs"]');
+        var icon = root.querySelector('use[href*="previous_xs"], use[xlink\\\\:href*="previous_xs"]');
         return icon ? icon.closest('button') : null;
       })();
   }
@@ -23,7 +23,7 @@ function ymFindVibeSkipButton(root, direction) {
   if (direction === 'next') {
     return root.querySelector('button[aria-label="Следующая песня"]')
       || (function() {
-        var icon = root.querySelector('use[href*="next_xs"], use[xlink\\:href*="next_xs"]');
+        var icon = root.querySelector('use[href*="next_xs"], use[xlink\\\\:href*="next_xs"]');
         return icon ? icon.closest('button') : null;
       })();
   }
@@ -60,10 +60,10 @@ function ymDetectSonataPlaybackIsPlaying() {
   if (document.querySelector("button.BaseSonataControlsDesktop_sonataButton__GbwFt[data-test-id='PLAY_BUTTON']")) {
     return false;
   }
-  if (document.querySelector("svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[xlink\\:href='/icons/sprite.svg#pause_filled_l'], svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[href='/icons/sprite.svg#pause_filled_l']")) {
+  if (document.querySelector("svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[xlink\\\\:href='/icons/sprite.svg#pause_filled_l'], svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[href='/icons/sprite.svg#pause_filled_l']")) {
     return true;
   }
-  if (document.querySelector("svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[xlink\\:href='/icons/sprite.svg#play_filled_l'], svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[href='/icons/sprite.svg#play_filled_l']")) {
+  if (document.querySelector("svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[xlink\\\\:href='/icons/sprite.svg#play_filled_l'], svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[href='/icons/sprite.svg#play_filled_l']")) {
     return false;
   }
 
@@ -107,7 +107,7 @@ function ymToggleSonataPlayback() {
     return { success: true, message: 'Трек запущен', wasPlaying: false };
   }
 
-  var pauseSvgL = document.querySelector("svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[xlink\\:href='/icons/sprite.svg#pause_filled_l'], svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[href='/icons/sprite.svg#pause_filled_l']");
+  var pauseSvgL = document.querySelector("svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[xlink\\\\:href='/icons/sprite.svg#pause_filled_l'], svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[href='/icons/sprite.svg#pause_filled_l']");
   if (pauseSvgL) {
     var pauseBtn = pauseSvgL.closest('button');
     if (pauseBtn) {
@@ -116,7 +116,7 @@ function ymToggleSonataPlayback() {
     }
   }
 
-  var playSvgL = document.querySelector("svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[xlink\\:href='/icons/sprite.svg#play_filled_l'], svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[href='/icons/sprite.svg#play_filled_l']");
+  var playSvgL = document.querySelector("svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[xlink\\\\:href='/icons/sprite.svg#play_filled_l'], svg.BaseSonataControlsDesktop_playButtonIcon__TlFqv use[href='/icons/sprite.svg#play_filled_l']");
   if (playSvgL) {
     var playBtn = playSvgL.closest('button');
     if (playBtn) {
