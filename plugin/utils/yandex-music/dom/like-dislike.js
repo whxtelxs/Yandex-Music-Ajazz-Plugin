@@ -4,9 +4,10 @@ module.exports = `
 function ymFindVibeLikeButton() {
   var bar = ymFindVibePlayerBar();
   if (!bar) return null;
-  return bar.querySelector('button[aria-label="Нравится"]')
+  return bar.querySelector('button[data-test-id="LIKE_BUTTON"]')
+    || bar.querySelector('button[aria-label="Нравится"]')
     || (function() {
-      var icon = bar.querySelector('use[href*="liked_xs"], use[xlink\\\\:href*="liked_xs"], use[href*="like_xs"], use[xlink\\\\:href*="like_xs"]');
+      var icon = bar.querySelector('use[href*="liked_xs"], use[*|href*="liked_xs"], use[href*="like_xs"], use[*|href*="like_xs"]');
       return icon ? icon.closest('button') : null;
     })();
 }
@@ -14,9 +15,10 @@ function ymFindVibeLikeButton() {
 function ymFindVibeDislikeButton() {
   var bar = ymFindVibePlayerBar();
   if (!bar) return null;
-  return bar.querySelector('button[aria-label="Не нравится"]')
+  return bar.querySelector('button[data-test-id="DISLIKE_BUTTON"]')
+    || bar.querySelector('button[aria-label="Не нравится"]')
     || (function() {
-      var icon = bar.querySelector('use[href*="dislike_xs"], use[xlink\\\\:href*="dislike_xs"]');
+      var icon = bar.querySelector('use[href*="dislike_xs"], use[*|href*="dislike_xs"]');
       return icon ? icon.closest('button') : null;
     })();
 }
