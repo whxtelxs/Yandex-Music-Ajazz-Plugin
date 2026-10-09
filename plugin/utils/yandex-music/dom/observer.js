@@ -2,172 +2,131 @@
 
 module.exports = `
 function ymCollectAjazzState() {
+  var metadata = ymGetTrackInfo();
+  var time = ymGetTrackTime();
+  var vibe = ymIsVibePageActive();
+  var menu = vibe ? ymScanVibeContextMenu(ymFindVibeContextMenuPanel()) : null;
+  var shuffle = vibe ? null : ymDetectSonataControlByFragment('shuffle');
+  var repeat = vibe ? null : ymDetectSonataControlByFragment('repeat');
   var next = {
-    vibeActive: ymIsVibePageActive(),
-    vibeMode: null,
-    shuffleAvailable: null,
-    shuffleOn: null,
-    repeatMode: null,
-    trackTitle: null,
-    trackArtist: null,
-    trackUrl: null,
-    coverUrl: null,
-    playing: null,
-    liked: null,
-    muted: null,
-    currentTime: null,
-    totalTime: null,
-    progressValue: null,
-    progressMax: null,
+    playerReady: !!(vibe ? ymFindVibePlayerBar() : ymFindSonataPlayerBar()),
+    vibeActive: vibe,
+    shuffleAvailable: vibe ? ymDetectVibeShuffleAvailable() : true,
+    shuffleOn: menu ? menu.shuffleOn : (shuffle && shuffle.ok ? shuffle.shuffle : null),
+    repeatMode: menu ? menu.repeatMode : (repeat && repeat.ok ? repeat.mode : null),
+    trackTitle: metadata.success ? metadata.title : null,
+    trackArtist: metadata.success ? metadata.artist : null,
+    trackUrl: metadata.success ? metadata.trackUrl : null,
+    coverUrl: metadata.success ? metadata.coverUrl : null,
+    playing: ymDetectPlaybackIsPlaying(),
+    liked: ymDetectLikeIsLiked(),
+    muted: ymDetectMuteIsMuted(),
+    currentTime: time.success ? time.currentTime : null,
+    totalTime: time.success ? time.totalTime : null,
+    progressValue: time.success ? time.progressValue : null,
+    progressMax: time.success ? time.progressMax : null,
     version: 0
   };
-
-  next.playing = ymDetectPlaybackIsPlaying();
-  next.liked = ymDetectLikeIsLiked();
-  next.muted = ymDetectMuteIsMuted();
-  var timeInfo = ymGetTrackTime();
-  if (timeInfo && timeInfo.success) {
-    next.currentTime = timeInfo.currentTime;
-    next.totalTime = timeInfo.totalTime;
-    next.progressValue = timeInfo.progressValue;
-    next.progressMax = timeInfo.progressMax;
-  }
-
-  if (next.vibeActive) {
-    var ctx = document.querySelector('[class*="VibeResetButton_context"]');
-    var modeText = ctx ? (ctx.textContent || ctx.getAttribute('title') || '').trim() : '';
-    if (modeText.indexOf('Мне нравится') !== -1) next.vibeMode = 'likes';
-    else if (modeText) next.vibeMode = 'wave';
-
-    next.shuffleAvailable = ymDetectVibeShuffleAvailable();
-    next.trackTitle = ymGetVibeTrackTitle();
-    next.trackArtist = ymGetVibeTrackArtist();
-    var vibeCoverUrl = ymResolveVibeCoverUrl();
-    next.coverUrl = ymUpscaleCoverUrl(vibeCoverUrl);
-    next.trackUrl = ymResolveTrackPageUrl(vibeCoverUrl);
-
-    var panel = ymFindVibeContextMenuPanel();
-    var menuState = ymScanVibeContextMenu(panel);
-    if (menuState) {
-      if (panel) next.shuffleAvailable = menuState.shuffleAvailable;
-      if (menuState.shuffleOn !== null) next.shuffleOn = menuState.shuffleOn;
-      if (menuState.repeatMode !== null) next.repeatMode = menuState.repeatMode;
-    }
-  } else {
-    next.shuffleAvailable = true;
-    var sonataBar = ymFindSonataPlayerBar();
-    if (sonataBar) next.trackUrl = ymResolveTrackPageUrl();
-    var sonataShuffle = ymDetectSonataControlByFragment('shuffle');
-    if (sonataShuffle.ok) next.shuffleOn = sonataShuffle.shuffle;
-    var sonataRepeat = ymDetectSonataControlByFragment('repeat');
-    if (sonataRepeat.ok) next.repeatMode = sonataRepeat.mode;
-  }
-
   return next;
 }
 
 function ymStateFingerprint(state) {
-  return [
-    state.vibeActive,
-    state.vibeMode,
-    state.shuffleAvailable,
-    state.shuffleOn,
-    state.repeatMode,
-    state.trackTitle,
-    state.trackArtist,
-    state.trackUrl,
-    state.coverUrl,
-    state.playing,
-    state.liked,
-    state.muted,
-    state.currentTime,
-    state.totalTime
-  ].join('|');
+  var fields = ['playerReady', 'vibeActive', 'shuffleAvailable', 'shuffleOn', 'repeatMode', 'trackTitle',
+    'trackArtist', 'trackUrl', 'coverUrl', 'playing', 'liked', 'muted', 'currentTime', 'totalTime'];
+  return JSON.stringify(fields.map(function(key) { return state[key]; }));
 }
 
 function ymInstallAjazzObserver() {
-  if (window.__YM_AJAZZ_OBSERVER__) {
-    window.__YM_AJAZZ_STATE = ymCollectAjazzState();
-    window.__YM_AJAZZ_STATE.version = (window.__YM_AJAZZ_STATE.version || 0) + 1;
-    return;
+  if (window.__YM_AJAZZ_OBSERVER__ && window.__YM_AJAZZ_OBSERVER__.dispose) {
+    window.__YM_AJAZZ_OBSERVER__.dispose();
   }
-  window.__YM_AJAZZ_OBSERVER__ = true;
-  window.__YM_AJAZZ_STATE = ymCollectAjazzState();
-  window.__YM_AJAZZ_STATE.version = 1;
-
-  var lastFp = ymStateFingerprint(window.__YM_AJAZZ_STATE);
   var timer = null;
+  var observedRoot = null;
+  var observedMenu = null;
+  var disposed = false;
+  var lastFingerprint = '';
+  var observer = new MutationObserver(scheduleRefresh);
+  var menuObserver = new MutationObserver(scheduleRefresh);
+  var rootObserver = new MutationObserver(function() {
+    var previousRoot = observedRoot;
+    var previousMenu = observedMenu;
+    attachPlayerObserver();
+    if (previousRoot !== observedRoot || previousMenu !== observedMenu) scheduleRefresh();
+  });
 
   function publish() {
-    if (typeof ymAjazzNotify === 'function') {
-      ymAjazzNotify(JSON.stringify(window.__YM_AJAZZ_STATE));
-    }
+    if (typeof ymAjazzNotify === 'function') ymAjazzNotify(JSON.stringify(window.__YM_AJAZZ_STATE));
   }
 
   function refresh() {
-    var prev = window.__YM_AJAZZ_STATE || {};
-    var collected = ymCollectAjazzState();
-    if (collected.vibeActive === prev.vibeActive && collected.shuffleOn === null && prev.shuffleOn !== null && prev.shuffleOn !== undefined) {
-      collected.shuffleOn = prev.shuffleOn;
+    if (disposed) return;
+    var previous = window.__YM_AJAZZ_STATE || {};
+    var next = ymCollectAjazzState();
+    var sameTrack = next.trackTitle && next.trackTitle === previous.trackTitle
+      && next.trackArtist === previous.trackArtist;
+    if (next.vibeActive === previous.vibeActive) {
+      if (next.shuffleAvailable === null) next.shuffleAvailable = previous.shuffleAvailable ?? null;
+      if (next.shuffleOn === null) next.shuffleOn = previous.shuffleOn ?? null;
+      if (next.repeatMode === null) next.repeatMode = previous.repeatMode ?? null;
     }
-    if (collected.vibeActive === prev.vibeActive && (collected.repeatMode === null || collected.repeatMode === undefined) && prev.repeatMode !== null && prev.repeatMode !== undefined) {
-      collected.repeatMode = prev.repeatMode;
+    if (sameTrack) {
+      if (!next.trackUrl) next.trackUrl = previous.trackUrl;
+      if (!next.coverUrl) next.coverUrl = previous.coverUrl;
     }
-    if (!collected.trackArtist && prev.trackArtist && prev.trackTitle === collected.trackTitle) {
-      collected.trackArtist = prev.trackArtist;
-    }
-    if (!collected.trackUrl && prev.trackUrl && prev.trackTitle === collected.trackTitle) {
-      collected.trackUrl = prev.trackUrl;
-    }
-    if (!collected.coverUrl && prev.coverUrl && prev.trackTitle === collected.trackTitle) {
-      collected.coverUrl = prev.coverUrl;
-    }
-    collected.version = (prev.version || 0) + 1;
-    var fp = ymStateFingerprint(collected);
-    if (fp !== lastFp) {
-      lastFp = fp;
-      window.__YM_AJAZZ_STATE = collected;
+    next.version = (previous.version || 0) + 1;
+    var fingerprint = ymStateFingerprint(next);
+    if (fingerprint !== lastFingerprint) {
+      lastFingerprint = fingerprint;
+      window.__YM_AJAZZ_STATE = next;
       publish();
     }
   }
 
   function scheduleRefresh() {
-    if (timer) return;
-    timer = setTimeout(function() {
-      timer = null;
-      refresh();
-    }, 50);
+    if (disposed || timer) return;
+    timer = setTimeout(function() { timer = null; refresh(); }, 80);
   }
 
-  var observedRoot = null;
-  var observer = new MutationObserver(scheduleRefresh);
   function attachPlayerObserver() {
-    var root = ymFindVibePlayerBar() || ymFindSonataPlayerBar() || document.body;
-    if (!root || root === observedRoot) return;
+    if (disposed) return;
+    var menu = ymFindVibeContextMenuPanel();
+    if (menu !== observedMenu) {
+      menuObserver.disconnect();
+      observedMenu = menu;
+      if (menu) menuObserver.observe(menu, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'aria-pressed', 'aria-disabled'] });
+    }
+    var root = ymIsVibePageActive() ? ymFindVibePlayerBar() : ymFindSonataPlayerBar();
+    if (root === observedRoot) return;
     observer.disconnect();
     observedRoot = root;
+    if (!root) return;
     observer.observe(root, {
       childList: true,
+      characterData: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['aria-expanded', 'aria-pressed', 'aria-label', 'class', 'aria-hidden', 'disabled', 'src', 'style']
+      attributeFilter: ['aria-expanded', 'aria-pressed', 'aria-label', 'aria-hidden', 'class', 'disabled', 'src', 'srcset']
     });
   }
+
+  var interval = setInterval(function() { attachPlayerObserver(); scheduleRefresh(); }, 2000);
+  window.__YM_AJAZZ_OBSERVER__ = {
+    dispose: function() {
+      if (disposed) return;
+      disposed = true;
+      clearTimeout(timer);
+      clearInterval(interval);
+      observer.disconnect();
+      menuObserver.disconnect();
+      rootObserver.disconnect();
+      window.__YM_AJAZZ_OBSERVER__ = null;
+    }
+  };
+  if (document.body || document.documentElement) {
+    rootObserver.observe(document.body || document.documentElement, { childList: true, subtree: true });
+  }
   attachPlayerObserver();
-
-  var rootObserver = new MutationObserver(function() {
-    attachPlayerObserver();
-    scheduleRefresh();
-  });
-  rootObserver.observe(document.body || document.documentElement, {
-    childList: true,
-    subtree: false
-  });
-  window.__YM_AJAZZ_ROOT_TIMER__ = setInterval(function() {
-    attachPlayerObserver();
-    scheduleRefresh();
-  }, 2000);
-
-  scheduleRefresh();
+  refresh();
 }
+
 `;

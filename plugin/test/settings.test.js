@@ -37,6 +37,16 @@ test('global patches preserve existing and unknown settings', () => {
     );
 });
 
+test('retired application paths are ignored in saved settings and patches', () => {
+    const plugin = new FakePlugin();
+    initDeps(plugin, {});
+    FakePlugin.globalSettings = { appPath: 'missing.exe', debugPort: 9333 };
+    assert.equal(Object.hasOwn(getSettingsSnapshot(), 'appPath'), false);
+    assert.equal(getSettingsSnapshot().debugPort, 9333);
+    assert.deepEqual(sanitizeSettingsPatch({ appPath: 'other.exe' }), {});
+    FakePlugin.globalSettings = {};
+});
+
 test('resolver uses global, then legacy context, then default', () => {
     const plugin = new FakePlugin();
     plugin['ym-volume-add'] = {
@@ -62,6 +72,8 @@ test('resolver uses global, then legacy context, then default', () => {
     }), 13);
     assert.equal(resolveSetting('trackInfoFontSize'), 18);
     assert.deepEqual(getSettingsSnapshot(), {
+        nowPlaying: require('../../propertyInspector/now-playing/config').defaults,
+        nowPlayingPresets: [],
         debugPort: 9222,
         volumeStep: 13,
         trackInfoTextSize: 12,

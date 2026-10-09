@@ -1,7 +1,6 @@
 'use strict';
 
 const { Actions, log } = require('../utils/plugin');
-const { sendLogToPropertyInspector } = require('../lib/helpers');
 const { addContext, removeContext, hasContext, buttonContexts } = require('../lib/contexts');
 const { appState } = require('../lib/app-state');
 const { setTimeDisplay } = require('../lib/display');
@@ -19,11 +18,9 @@ module.exports = function registerTimeTotalAction(plugin) {
         },
         async _willAppear({ context }) {
             log.info('YM Time Total появился:', context);
-            sendLogToPropertyInspector(`Инициализация кнопки времени (общее): ${context}`, 'info');
 
             if (!hasContext('timeTotal', context)) {
                 addContext('timeTotal', context);
-                sendLogToPropertyInspector(`Добавлена кнопка времени (общее). Всего кнопок: ${buttonContexts.timeTotal.length}`, 'info');
                 appState.lastTimeInfo = null;
             }
 
@@ -32,10 +29,8 @@ module.exports = function registerTimeTotalAction(plugin) {
         },
         _willDisappear({ context }) {
             const remaining = removeContext('timeTotal', context);
-            sendLogToPropertyInspector(`Удалена кнопка времени (общее). Осталось кнопок: ${remaining}`, 'info');
         },
         keyUp() {
-            sendLogToPropertyInspector('Кнопка времени не кликабельная', 'info');
         }
     });
 };

@@ -1,6 +1,6 @@
 'use strict';
 
-const { log } = require('../../plugin');
+const { log } = require('../../../lib/logger');
 
 module.exports = {
     isWarmingUp() {
@@ -17,17 +17,19 @@ module.exports = {
 
     async waitForPlayerReady({
         timeoutMs = 45000,
-        intervalMs = 500
+        intervalMs = 500,
+        signal
     } = {}) {
         const deadline = Date.now() + timeoutMs;
         log.info('Ожидание готовности интерфейса Яндекс Музыки...');
 
-        while (Date.now() < deadline) {
+        while (Date.now() < deadline && !signal?.aborted) {
             const ready = await this._evaluateDom(
                 'return !!(ymFindSonataPlayerBar() || ymFindVibePlayerBar());',
-                { priority: 'background', key: 'player-ready' }
+                { priority: 'background', key: 'player-ready', timeoutMs: Math.max(1, deadline - Date.now()), signal }
             );
             if (ready) {
+                this.playerReady = true;
                 log.info('Интерфейс плеера готов');
                 return true;
             }

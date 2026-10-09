@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
-const { log } = require('../utils/plugin');
+const { log } = require('../lib/logger');
 const { deps } = require('./deps');
 const { fetchLatestRelease, buildUpdateInfo } = require('./update-checker');
 const { readState, writeState } = require('./update-state');
@@ -14,7 +14,8 @@ const NOTIFY_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 const state = {
     info: null,
     checking: false,
-    lastError: null
+    lastError: null,
+    promise: null
 };
 
 function readCurrentVersion() {
@@ -28,7 +29,7 @@ function getPublicInfo() {
     try {
         currentVersion = readCurrentVersion();
     } catch {
-        currentVersion = currentVersion || '—';
+        currentVersion = currentVersion || '?';
     }
 
     if (!info) {
@@ -46,7 +47,7 @@ function getPublicInfo() {
     }
 
     return {
-        status: state.checking ? 'checking' : 'ready',
+        status: state.checking ? 'checking' : (state.lastError ? 'error' : 'ready'),
         currentVersion,
         latestVersion: info.latestVersion,
         hasUpdate: !!info.updateAvailable,
@@ -81,16 +82,20 @@ function recordNotification(info) {
     });
 }
 
+function powershellLiteral(value) {
+    return "'" + String(value || '').replaceAll("'", "''") + "'";
+}
+
 function tryWindowsNotification(title, message, clickUrl) {
     if (process.platform !== 'win32') return;
     const script = `
 Add-Type -AssemblyName System.Windows.Forms
-$url = ${JSON.stringify(clickUrl || '')}
+$url = ${powershellLiteral(clickUrl)}
 $notify = New-Object System.Windows.Forms.NotifyIcon
 $notify.Icon = [System.Drawing.SystemIcons]::Information
 $notify.Visible = $true
-$notify.BalloonTipTitle = ${JSON.stringify(title)}
-$notify.BalloonTipText = ${JSON.stringify(message)}
+$notify.BalloonTipTitle = ${powershellLiteral(title)}
+$notify.BalloonTipText = ${powershellLiteral(message)}
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 15000
 $closed = $false
@@ -117,7 +122,9 @@ $timer.Start()
         '-ExecutionPolicy', 'Bypass',
         '-Command',
         script
-    ], { windowsHide: true }, () => {});
+    ], { windowsHide: true, timeout: 20000 }, error => {
+        if (error) log.warn('Уведомление об обновлении:', error.message);
+    });
 }
 
 function notifyIfNeeded() {
@@ -138,8 +145,13 @@ function notifyIfNeeded() {
     );
 }
 
-async function checkForUpdates({ notify = false, force = false } = {}) {
-    if (state.checking && !force) return getPublicInfo();
+function checkForUpdates(options = {}) {
+    if (state.promise) return state.promise;
+    state.promise = performCheck(options).finally(() => { state.promise = null; });
+    return state.promise;
+}
+
+async function performCheck({ notify = false } = {}) {
     state.checking = true;
     state.lastError = null;
     broadcastUpdateInfo();

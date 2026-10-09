@@ -1,6 +1,6 @@
 'use strict';
 
-const { log } = require('../../plugin');
+const { log } = require('../../../lib/logger');
 
 module.exports = {
   async toggleMute() {
@@ -10,7 +10,7 @@ module.exports = {
       if (value && value.success) {
         log.info(value.message);
         log.info(`Звук был ${value.wasMuted ? 'выключен' : 'включен'}`);
-        return { success: true, muted: !value.wasMuted };
+        return { success: true, accepted: true, confirmed: value.confirmed === true, muted: typeof value.muted === 'boolean' ? value.muted : null };
       }
       log.error('Не удалось переключить звук:', value?.message);
       return false;
@@ -63,10 +63,10 @@ module.exports = {
     }
   },
 
-  async changeVolume(delta) {
+  async changeVolume(delta, options = {}) {
     try {
       const safeDelta = Math.max(-100, Math.min(100, Number(delta) || 0));
-      const value = await this._evaluateDom(`return ymChangeVolume(${safeDelta});`, { priority: 'user' });
+      const value = await this._evaluateDom(`return ymChangeVolume(${safeDelta});`, { priority: 'user', signal: options.signal });
       if (!value?.success) {
         log.error('Не удалось изменить громкость:', value?.message);
         return false;

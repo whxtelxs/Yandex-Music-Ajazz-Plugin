@@ -8,6 +8,8 @@ const buttonContexts = {
     mute: [],
     volumeEncoder: [],
     cover: [],
+    coverProgress: [],
+    trackProgress: [],
     timeTotal: [],
     trackInfo: []
 };
@@ -26,6 +28,7 @@ function removeContext(key, context) {
     if (index !== -1) {
         list.splice(index, 1);
     }
+    require('./state-sync').forgetContext(context);
     return list.length;
 }
 

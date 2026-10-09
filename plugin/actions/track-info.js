@@ -1,7 +1,6 @@
 'use strict';
 
 const { Actions, log } = require('../utils/plugin');
-const { sendLogToPropertyInspector } = require('../lib/helpers');
 const { addContext, removeContext, hasContext, buttonContexts } = require('../lib/contexts');
 const { setTrackInfoDisplay } = require('../lib/display');
 const { checkTrackInfoState } = require('../lib/state-sync');
@@ -17,11 +16,9 @@ module.exports = function registerTrackInfoAction(plugin) {
         },
         async _willAppear({ context }) {
             log.info('YM Track Info появился:', context);
-            sendLogToPropertyInspector(`Инициализация кнопки информации о треке: ${context}`, 'info');
 
             if (!hasContext('trackInfo', context)) {
                 addContext('trackInfo', context);
-                sendLogToPropertyInspector(`Добавлена кнопка информации о треке. Всего кнопок: ${buttonContexts.trackInfo.length}`, 'info');
             }
 
             setTrackInfoDisplay(context, 'Загрузка...');
@@ -29,10 +26,8 @@ module.exports = function registerTrackInfoAction(plugin) {
         },
         _willDisappear({ context }) {
             const remaining = removeContext('trackInfo', context);
-            sendLogToPropertyInspector(`Удалена кнопка информации о треке. Осталось кнопок: ${remaining}`, 'info');
         },
         keyUp() {
-            sendLogToPropertyInspector('Кнопка информации о треке не кликабельная', 'info');
         }
     });
 };

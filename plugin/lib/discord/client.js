@@ -1,77 +1,44 @@
 'use strict';
 
 const RPC = require('discord-rpc');
+const { withTimeout } = require('../async-utils');
 
-const CONNECT_TIMEOUT_MS = 50000;
-
-async function loginClient(appId, transportName) {
+async function loginClient(appId, transport, signal) {
     RPC.register(appId);
-    const client = new RPC.Client({ transport: transportName });
-    return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-            cleanup();
-            destroyQuietly(client);
-            reject(new Error('RPC_CONNECTION_TIMEOUT'));
-        }, CONNECT_TIMEOUT_MS);
-        const onReady = () => {
-            cleanup();
-            resolve(client);
-        };
-        const onError = error => {
-            cleanup();
-            destroyQuietly(client);
-            reject(error);
-        };
-        const cleanup = () => {
-            clearTimeout(timer);
-            client.removeListener('ready', onReady);
-            client.removeListener('error', onError);
-        };
-        client.once('ready', onReady);
-        client.once('error', onError);
-        client.login({ clientId: appId }).catch(onError);
+    const client = new RPC.Client({ transport });
+    const ready = new Promise((resolve, reject) => {
+        client.once('ready', () => resolve(client));
+        client.on('error', reject);
+        client.transport.on('error', error => client.emit('error', error));
+        client.login({ clientId: appId }).catch(reject);
     });
-}
-
-function destroyQuietly(client) {
     try {
-        client.destroy();
-    } catch {
-        // ignore
+        return await withTimeout(ready, 12000, 'RPC_CONNECTION_TIMEOUT', signal);
+    } catch (error) {
+        Promise.resolve(client.destroy()).catch(() => {});
+        throw error;
     }
 }
 
-async function connectDiscordClient(appId, log) {
-    const attempts = [];
+async function connectDiscordClient(appId, log, { signal } = {}) {
+    const failures = [];
     for (const transport of ['ipc', 'websocket']) {
-        try {
-            return await loginClient(appId, transport);
-        } catch (error) {
-            const message = error?.message || String(error);
-            attempts.push(`${transport}: ${message}`);
-            log.warn?.('Discord connect attempt failed:', attempts[attempts.length - 1]);
+        if (signal?.aborted) throw signal.reason;
+        try { return await loginClient(appId, transport, signal); }
+        catch (error) {
+            if (signal?.aborted) throw signal.reason;
+            failures.push(transport + ': ' + error.message);
+            log.debug?.('Discord connection:', error.message);
         }
     }
-    const error = new Error(attempts.join('; ') || 'Could not connect to Discord');
-    error.attempts = attempts;
-    throw error;
+    throw new Error(failures.join('; '));
 }
 
 function formatConnectError(error) {
-    const raw = String(error?.message || error || '');
-    if (/timeout/i.test(raw)) {
-        return 'Discord не ответил вовремя. Нажмите Ctrl+R в Discord или перезапустите его, затем подождите ~30 секунд. Не запускайте Discord от администратора, если Ajazz — без прав.';
-    }
-    if (/could not connect|connection closed/i.test(raw)) {
-        return 'Не удалось подключиться к Discord. Убедитесь, что Discord запущен, и перезапустите его (Ctrl+R).';
-    }
-    if (/invalid client id/i.test(raw)) {
-        return 'Неверный Application ID в config.js. Проверьте ID в Discord Developer Portal.';
-    }
-    return `Discord: ${raw}`;
+    const message = String(error?.message || error || '');
+    if (/timeout|timed out/i.test(message)) return 'Discord не ответил вовремя. Проверьте, что он запущен';
+    if (/invalid client id/i.test(message)) return 'Неверный Discord Application ID';
+    return 'Не удалось подключиться к Discord. Проверьте приложение и права доступа';
 }
 
-module.exports = {
-    connectDiscordClient,
-    formatConnectError
-};
+module.exports = { connectDiscordClient, formatConnectError };

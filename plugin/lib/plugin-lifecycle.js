@@ -1,86 +1,60 @@
 'use strict';
 
 const { resolveHostProcess } = require('./host-process');
+const { withTimeout } = require('./async-utils');
 
 function isProcessAlive(pid) {
-    if (!pid || pid <= 0) return false;
-    try {
-        process.kill(pid, 0);
-        return true;
-    } catch {
-        return false;
-    }
+    if (!Number.isInteger(pid) || pid <= 0) return false;
+    try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
-function createPluginLifecycle({
-    log,
-    settingsServer,
-    discordPresence,
-    yandexMusic,
-    stopStateChecks
-}) {
-    let shuttingDown = false;
+function createPluginLifecycle({ log, plugin, settingsServer, discordPresence, yandexMusic, stopStateChecks, exit = code => process.exit(code) }) {
+    let shutdownPromise = null;
     let hostWatchTimer = null;
-    let hostPid = null;
+    let fatal = false;
 
-    async function shutdown(reason) {
-        if (shuttingDown) return;
-        shuttingDown = true;
-        log.info(`Завершение плагина (${reason})`);
-
-        if (hostWatchTimer) {
-            clearInterval(hostWatchTimer);
-            hostWatchTimer = null;
-        }
-
-        try {
-            await discordPresence?.stop?.();
-            await settingsServer?.stop?.();
-            stopStateChecks?.();
-            await yandexMusic?.disconnect?.({ reconnect: false });
-        } catch (error) {
-            log.error('Ошибка при завершении плагина:', error);
-        }
-
-        setImmediate(() => process.exit(0));
+    function shutdown(reason, exitCode = 0) {
+        fatal ||= exitCode !== 0;
+        if (shutdownPromise) return shutdownPromise;
+        clearInterval(hostWatchTimer);
+        try { stopStateChecks?.(); } catch (error) { log.error('Ошибка остановки синхронизации:', error); }
+        log.info('Завершение плагина: ' + reason);
+        const jobs = [
+            () => plugin?.disposeActions?.(),
+            () => settingsServer?.stop?.(),
+            () => discordPresence?.stop?.(),
+            () => yandexMusic?.disconnect?.({ reconnect: false })
+        ];
+        shutdownPromise = Promise.allSettled(jobs.map(job => withTimeout(job, 1500, 'Shutdown timed out')))
+            .then(results => {
+                for (const result of results) if (result.status === 'rejected') log.error('Ошибка очистки:', result.reason);
+            }).finally(() => exit(fatal ? 1 : 0));
+        return shutdownPromise;
     }
 
     async function startHostWatchdog() {
         try {
-            const host = await resolveHostProcess();
-            hostPid = host?.pid || null;
-            if (!hostPid) {
-                log.warn('Не удалось определить процесс StreamDock для watchdog');
-                return;
-            }
-            log.info(`Watchdog StreamDock: pid=${hostPid}`);
-        } catch (error) {
-            log.warn('Watchdog StreamDock не запущен:', error.message || error);
-            return;
-        }
-
-        hostWatchTimer = setInterval(() => {
-            if (shuttingDown) return;
-            if (!isProcessAlive(hostPid)) {
-                shutdown('streamdock-closed');
-            }
-        }, 1500);
+            const host = await withTimeout(resolveHostProcess, 6000, 'Host detection timed out');
+            if (!host?.pid || shutdownPromise) return;
+            hostWatchTimer = setInterval(() => {
+                if (!isProcessAlive(host.pid)) shutdown('streamdock-closed');
+            }, 1500);
+            hostWatchTimer.unref?.();
+        } catch (error) { log.debug('Host watchdog:', error.message); }
     }
 
     function registerProcessHooks() {
+        const fatalError = error => {
+            log.error('Фатальная ошибка:', error);
+            shutdown('fatal-error', 1);
+        };
         process.on('SIGTERM', () => shutdown('sigterm'));
         process.on('SIGINT', () => shutdown('sigint'));
+        process.on('uncaughtException', fatalError);
+        process.on('unhandledRejection', fatalError);
     }
 
-    return {
-        shutdown,
-        startHostWatchdog,
-        registerProcessHooks,
-        isProcessAlive
-    };
+    return { shutdown, startHostWatchdog, registerProcessHooks, isProcessAlive };
 }
 
-module.exports = {
-    createPluginLifecycle,
-    isProcessAlive
-};
+module.exports = { createPluginLifecycle, isProcessAlive };

@@ -39,19 +39,33 @@ function ymQueryDeep(selector, root) {
 }
 
 function ymCollectDeepLinks(root) {
-  var out = [];
-  function walk(node) {
-    if (!node) return;
-    if (node.querySelectorAll) {
-      var links = node.querySelectorAll('a[href]');
-      for (var i = 0; i < links.length; i++) out.push(links[i]);
+  var links = [];
+  function collect(scope) {
+    if (!scope || !scope.querySelectorAll) return;
+    links.push.apply(links, scope.querySelectorAll('a[href]'));
+    var elements = scope.querySelectorAll('*');
+    for (var i = 0; i < elements.length; i++) {
+      if (elements[i].shadowRoot) collect(elements[i].shadowRoot);
     }
-    var children = node.children || [];
-    for (var c = 0; c < children.length; c++) walk(children[c]);
-    if (node.shadowRoot) walk(node.shadowRoot);
   }
-  walk(root || document);
-  return out;
+  collect(root || document);
+  return links;
+}
+
+function ymCanClick(button) {
+  return !!button && !button.disabled && button.getAttribute('aria-disabled') !== 'true'
+    && button.getAttribute('aria-hidden') !== 'true'
+    && !(button.closest && button.closest('[hidden], [inert], [aria-hidden="true"]'))
+    && !(button.getClientRects && button.getClientRects().length === 0);
+}
+
+async function ymWaitForState(read, expected) {
+  for (var attempt = 0; attempt < 20; attempt++) {
+    var value = read();
+    if (value !== null && value !== undefined && (expected === undefined || value === expected)) return value;
+    await ymWait(40);
+  }
+  return null;
 }
 
 function ymSetRangeValue(slider, newValue) {
@@ -91,12 +105,12 @@ function ymParseArtistLink(link) {
 }
 
 function ymUniqueNonEmpty(items) {
-  var seen = {};
+  var seen = new Set();
   var out = [];
   for (var i = 0; i < items.length; i++) {
     var item = (items[i] || '').trim();
-    if (!item || seen[item]) continue;
-    seen[item] = true;
+    if (!item || seen.has(item)) continue;
+    seen.add(item);
     out.push(item);
   }
   return out;

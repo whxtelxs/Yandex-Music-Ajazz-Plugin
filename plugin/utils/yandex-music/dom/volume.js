@@ -54,27 +54,18 @@ function ymDetectMuteIsMuted() {
   return null;
 }
 
-function ymToggleMute() {
-  try {
-    var muteButton = ymFindMuteButton();
-    if (muteButton) {
-      var wasMuted = muteButton.getAttribute('aria-label') === 'Включить звук';
-      muteButton.click();
-      return {
-        success: true,
-        message: wasMuted ? 'Звук включен' : 'Звук выключен',
-        wasMuted: wasMuted
-      };
-    }
-    return { success: false, message: 'Не удалось найти кнопку управления звуком' };
-  } catch (err) {
-    return { success: false, message: err.message, error: err.toString() };
-  }
+async function ymToggleMute() {
+  var button = ymFindMuteButton();
+  if (!ymCanClick(button)) return { success: false, message: 'Управление звуком недоступно' };
+  var before = ymDetectMuteIsMuted();
+  button.click();
+  var muted = before === null ? null : await ymWaitForState(ymDetectMuteIsMuted, !before);
+  return { success: true, accepted: true, confirmed: muted !== null, muted: muted, wasMuted: before };
 }
 
 function ymGetVolume() {
   var volumeSlider = ymFindVolumeSlider();
-  if (!volumeSlider) return { success: false, message: 'Слайдер громкости не найден' };
+  if (!volumeSlider || volumeSlider.disabled) return { success: false, message: 'Слайдер громкости не найден' };
   var value = parseFloat(volumeSlider.value) || 0;
   var max = parseFloat(volumeSlider.max) || 1;
   return {
@@ -87,7 +78,7 @@ function ymGetVolume() {
 
 function ymSetVolume(percent) {
   var volumeSlider = ymFindVolumeSlider();
-  if (!volumeSlider) return { success: false, message: 'Слайдер громкости не найден' };
+  if (!volumeSlider || volumeSlider.disabled) return { success: false, message: 'Слайдер громкости не найден' };
   var clampedPercent = Math.max(0, Math.min(100, percent));
   var max = parseFloat(volumeSlider.max) || 1;
   var newValue = (clampedPercent / 100) * max;
@@ -105,7 +96,7 @@ function ymChangeVolume(delta) {
   if (!current.success) return current;
   var result = ymSetVolume(current.volume + delta);
   if (result.success) {
-    result.muted = result.volume <= 0;
+    result.muted = ymDetectMuteIsMuted();
   }
   return result;
 }

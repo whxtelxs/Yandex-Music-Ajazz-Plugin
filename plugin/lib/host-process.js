@@ -9,7 +9,7 @@ function runPowerShell(script) {
             '-WindowStyle', 'Hidden',
             '-ExecutionPolicy', 'Bypass',
             '-Command', script
-        ], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+        ], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000 });
         let stdout = '';
         let stderr = '';
         child.stdout.on('data', chunk => { stdout += chunk.toString(); });

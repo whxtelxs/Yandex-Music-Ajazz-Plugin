@@ -1,9 +1,13 @@
 'use strict';
 
+const { isDeepStrictEqual } = require('node:util');
 const { deps } = require('./deps');
+const nowPlaying = require('../../propertyInspector/now-playing/config');
 const { resolveDiscordAppId } = require('./discord/constants');
 
 const SETTINGS_SCHEMA = Object.freeze({
+    nowPlaying: { defaultValue: nowPlaying.defaults, type: 'nowPlaying' },
+    nowPlayingPresets: { defaultValue: [], type: 'nowPlayingPresets' },
     debugPort: { defaultValue: 9222, min: 1, max: 65535 },
     volumeStep: { defaultValue: 5, min: 1, max: 99 },
     trackInfoTextSize: { defaultValue: 12, min: 4, max: 24 },
@@ -20,7 +24,9 @@ function hasOwn(object, key) {
 function clampSetting(key, value) {
     const schema = SETTINGS_SCHEMA[key];
     if (!schema) return undefined;
-    if (schema.type === 'boolean') return !!value;
+    if (schema.type === 'nowPlaying') return nowPlaying.sanitize(value);
+    if (schema.type === 'nowPlayingPresets') return nowPlaying.sanitizePresets(value);
+    if (schema.type === 'boolean') return value === true || value === 1 || value === 'true';
     const number = parseInt(value, 10);
     if (Number.isNaN(number)) return schema.defaultValue;
     return Math.max(schema.min, Math.min(schema.max, number));
@@ -32,6 +38,10 @@ function sanitizeSettingsPatch(input) {
         if (hasOwn(input, key)) patch[key] = clampSetting(key, input[key]);
     }
     return patch;
+}
+
+function settingEquals(left, right) {
+    return isDeepStrictEqual(left, right);
 }
 
 function mergeGlobalSettings(current, patch) {
@@ -78,6 +88,7 @@ function resolveSetting(key, { actionKey, context, legacyKey } = {}) {
 }
 
 module.exports = {
+    settingEquals,
     SETTINGS_SCHEMA,
     clampSetting,
     sanitizeSettingsPatch,

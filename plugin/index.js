@@ -27,13 +27,14 @@ const { syncDebugModeFromSettings } = require('./lib/debug-settings');
 const { getDiscordConfig } = require('./lib/settings');
 const { createDiscordPresenceService } = require('./lib/discord');
 
-const plugin = new Plugins('demo');
+const plugin = new Plugins();
 initDeps(plugin, yandexMusic, launcher);
 launcher.setDebugPort(9222);
 
 let settingsServer;
 let lifecycle;
-let lastDiscordTrackTitle = null;
+const { getTrackIdentity } = require('./lib/track-identity');
+let lastDiscordTrackKey = null;
 
 const discordPresence = createDiscordPresenceService({
     log,
@@ -49,16 +50,18 @@ settingsServer = new SettingsServer({
     launcher,
     rootDir: path.resolve(__dirname, '..', 'propertyInspector'),
     getDiscordStatus: () => discordPresence.getStatus(),
-    onSettingsChanged: () => Promise.all([
+    getNowPlayingState: getPresenceSnapshot,
+    onSettingsChanged: patch => Promise.all([
         checkTrackInfoState(),
         checkTimeState(),
-        discordPresence.applyConfig()
+        Object.prototype.hasOwnProperty.call(patch, 'discordRpcEnabled') ? discordPresence.applyConfig() : Promise.resolve()
     ]),
     logger: log
 });
 setSettingsServer(settingsServer);
 lifecycle = createPluginLifecycle({
     log,
+    plugin,
     settingsServer,
     discordPresence,
     yandexMusic,
@@ -70,9 +73,10 @@ syncDebugModeFromSettings();
 
 yandexMusic.onRemoteStateChange = remote => {
     applyYmRemoteState(remote);
-    const nextTitle = String(remote?.trackTitle || '').trim();
-    const force = !!nextTitle && nextTitle !== lastDiscordTrackTitle;
-    if (nextTitle) lastDiscordTrackTitle = nextTitle;
+    settingsServer.publishNowPlaying();
+    const nextKey = getTrackIdentity(remote);
+    const force = !!nextKey && nextKey !== lastDiscordTrackKey;
+    if (nextKey) lastDiscordTrackKey = nextKey;
     discordPresence.refresh({ force }).catch(error => log.error('Discord refresh error:', error));
 };
 yandexMusic.onConnected = async () => {
@@ -82,15 +86,16 @@ yandexMusic.onConnected = async () => {
         return;
     }
     await resyncAllStates();
-    settingsServer.broadcast({ type: 'connectionStatus', connected: true });
+    settingsServer.broadcast({ type: 'connectionStatus', ...yandexMusic.getConnectionInfo() });
     await discordPresence.refresh({ force: true });
 };
 yandexMusic.onConnectionChange = connected => {
+    settingsServer.publishNowPlaying();
     discordPresence.setMusicConnected(connected);
     if (!connected && !yandexMusic.shouldPreserveUiOnDisconnect?.()) {
         resetDisconnectedState();
     }
-    settingsServer.broadcast({ type: 'connectionStatus', connected });
+    settingsServer.broadcast({ type: 'connectionStatus', ...yandexMusic.getConnectionInfo(), connected });
 };
 plugin.onClose = () => lifecycle.shutdown('plugin-close');
 
@@ -102,6 +107,7 @@ registerUpdateService();
 startStateChecks();
 discordPresence.setMusicConnected(!!yandexMusic.connected);
 discordPresence.start();
-settingsServer.start().then(() => lifecycle.startHostWatchdog()).catch(error => {
+lifecycle.startHostWatchdog();
+settingsServer.start().catch(error => {
     log.error('Не удалось запустить панель настроек:', error);
 });

@@ -40,35 +40,37 @@ const PI_COMMANDS = {
         deps.plugin.sendToPropertyInspector({
             command: 'settingsPanelInfo',
             available: info.available,
-            port: info.port
+            port: info.port,
+            url: info.url
         }, context, action);
     },
-    openSettingsPanel(_message, context, action) {
-        const opened = deps.settingsServer?.open() || false;
+    async openSettingsPanel(_message, context, action) {
+        const opened = await deps.settingsServer?.open() || false;
         deps.plugin.sendToPropertyInspector({
             command: 'settingsPanelInfo',
             available: opened,
-            port: deps.settingsServer?.port || null
+            port: deps.settingsServer?.port || null,
+            url: deps.settingsServer?.getInfo().url || null
         }, context, action);
     }
 };
 
-function handlePropertyInspectorMessage(message) {
+async function handlePropertyInspectorMessage(message) {
     const { command } = message.payload;
     const handler = PI_COMMANDS[command];
     if (!handler) return;
 
     log.info('Выполняем команду Property Inspector:', command, message.payload);
 
-    handler(message, message.context, message.action);
+    await handler(message, message.context, message.action);
 }
 
 function registerPropertyInspector(plugin) {
-    plugin.onPluginMessage((message) => {
+    plugin.onPluginMessage(async (message) => {
         try {
             if (message.event === 'sendToPlugin' && message.payload?.command) {
                 log.info('Получена команда от Property Inspector:', message.payload.command, message.payload);
-                handlePropertyInspectorMessage(message);
+                await handlePropertyInspectorMessage(message);
             }
         } catch (error) {
             log.error('Ошибка при обработке сообщения от Property Inspector:', error);

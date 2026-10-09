@@ -1,15 +1,18 @@
 'use strict';
 
-const { log } = require('../../plugin');
+const { log } = require('../../../lib/logger');
 
 module.exports = {
   async toggleShuffle() {
     try {
       const value = await this._evaluateDom('return ymToggleShuffle();', { priority: 'user' });
       if (value && value.success) {
-        if (value.shuffle !== undefined) this.vibeShuffleState = !!value.shuffle;
-        this.remoteState = { ...(this.remoteState || {}), shuffleOn: !!value.shuffle };
-        this.onRemoteStateChange?.(this.remoteState);
+        if (typeof value.shuffle === 'boolean') this.vibeShuffleState = !!value.shuffle;
+        if (typeof value.shuffle === 'boolean') {
+          this.remoteState = { ...(this.remoteState || {}), ...value.state, shuffleOn: value.shuffle };
+          this.remoteStateUpdatedAt = Date.now();
+          this.onRemoteStateChange?.(this.remoteState);
+        } else await this.refreshRemoteState();
         return value;
       }
       if (value && value.unavailable) {
@@ -26,9 +29,12 @@ module.exports = {
     try {
       const value = await this._evaluateDom('return ymToggleRepeat();', { priority: 'user' });
       if (value && value.success) {
-        if (value.mode !== undefined) this.vibeRepeatMode = value.mode;
-        this.remoteState = { ...(this.remoteState || {}), repeatMode: value.mode };
-        this.onRemoteStateChange?.(this.remoteState);
+        if (Number.isInteger(value.mode)) this.vibeRepeatMode = value.mode;
+        if (Number.isInteger(value.mode) && value.mode >= 0 && value.mode <= 2) {
+          this.remoteState = { ...(this.remoteState || {}), ...value.state, repeatMode: value.mode };
+          this.remoteStateUpdatedAt = Date.now();
+          this.onRemoteStateChange?.(this.remoteState);
+        } else await this.refreshRemoteState();
         return value;
       }
       return false;
@@ -40,7 +46,7 @@ module.exports = {
 
   async getShufflePressed() {
     try {
-      if (this.remoteState) {
+      if (this.remoteState && Date.now() - this.remoteStateUpdatedAt < 5000) {
         if (this.remoteState.shuffleAvailable === false) return false;
         if (this.remoteState.shuffleOn !== null && this.remoteState.shuffleOn !== undefined) {
           return !!this.remoteState.shuffleOn;
@@ -61,7 +67,7 @@ module.exports = {
 
   async getRepeatMode() {
     try {
-      if (this.remoteState && this.remoteState.repeatMode !== null && this.remoteState.repeatMode !== undefined) {
+      if (this.remoteState && Date.now() - this.remoteStateUpdatedAt < 5000 && this.remoteState.repeatMode !== null && this.remoteState.repeatMode !== undefined) {
         return this.remoteState.repeatMode;
       }
       const value = await this._evaluateDom('return ymDetectRepeatMode();', { key: 'read-repeat' });

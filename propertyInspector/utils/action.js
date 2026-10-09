@@ -159,11 +159,12 @@ async function connectElgatoStreamDeckSocket(port, uuid, event, app, info) {
     if (!$local) return;
     $lang = await new Promise(resolve => {
         const req = new XMLHttpRequest();
-        req.open('GET', `../../${JSON.parse(app).application.language}.json`);
+        const language = JSON.parse(app).application?.language || 'ru';
+        req.open('GET', '../../' + encodeURIComponent(language) + '.json');
         req.send();
         req.onreadystatechange = () => {
             if (req.readyState === 4) {
-                resolve(JSON.parse(req.responseText).Localization);
+                try { resolve(JSON.parse(req.responseText).Localization || {}); } catch { resolve({}); }
             }
         };
     });

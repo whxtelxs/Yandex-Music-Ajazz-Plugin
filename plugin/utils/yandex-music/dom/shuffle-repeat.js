@@ -4,20 +4,23 @@ module.exports = `
 function ymFindVibeContextMenuButton() {
   var bar = ymFindVibePlayerBar();
   if (!bar) return null;
-  return bar.querySelector('button[aria-label="Контекстное меню"]')
+  return bar.querySelector('[data-test-id="VIBE_CONTEXT_MENU_BUTTON"]')
+    || bar.querySelector('button[aria-label="Контекстное меню"]')
     || bar.querySelector('button[aria-haspopup="menu"]');
 }
 
 function ymFindVibeContextMenuPanel() {
-  var btn = ymFindVibeContextMenuButton();
-  if (btn) {
-    var controlsId = btn.getAttribute('aria-controls');
-    if (controlsId) {
-      var panel = document.getElementById(controlsId);
-      if (panel) return panel;
-    }
+  var button = ymFindVibeContextMenuButton();
+  if (!button || button.getAttribute('aria-expanded') !== 'true') return null;
+  var controlsId = button.getAttribute('aria-controls');
+  var panel = controlsId ? document.getElementById(controlsId) : null;
+  if (panel) return panel;
+  var menus = document.querySelectorAll('[role="menu"]');
+  for (var i = 0; i < menus.length; i++) {
+    if (menus[i].getAttribute('aria-labelledby') === button.id && button.id) return menus[i];
+    if (menus[i].querySelector('[data-test-id="VIBE_CONTEXT_MENU"]')) return menus[i];
   }
-  return document.querySelector('[role="menu"]');
+  return null;
 }
 
 function ymCloseVibeContextMenu() {
@@ -26,7 +29,6 @@ function ymCloseVibeContextMenu() {
     btn.click();
     return true;
   }
-  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
   return false;
 }
 
@@ -64,7 +66,9 @@ function ymIsVibeMenuItemActive(button) {
 }
 
 function ymFindVibeMenuItem(fragment, scope) {
-  scope = scope || document;
+  if (!scope) return null;
+  var direct = scope.querySelector('[data-test-id="VIBE_CONTEXT_MENU_' + fragment.toUpperCase() + '_ITEM"]');
+  if (direct) return direct;
   var items = scope.querySelectorAll('[role="menuitem"]');
   for (var i = 0; i < items.length; i++) {
     var b = items[i];
@@ -96,14 +100,7 @@ function ymReadVibeMenuRepeatMode(button) {
 function ymDetectVibeShuffleAvailable() {
   if (!ymIsVibePageActive()) return null;
   var panel = ymFindVibeContextMenuPanel();
-  if (panel) {
-    return !!ymFindVibeMenuItem('shuffle', panel);
-  }
-  var ctx = document.querySelector('[class*="VibeResetButton_context"]');
-  var modeText = ctx ? (ctx.textContent || ctx.getAttribute('title') || '').trim().toLowerCase() : '';
-  if (modeText.indexOf('мне нравится') !== -1) return true;
-  if (modeText.indexOf('моя волна') !== -1 || (modeText.indexOf('волна') !== -1 && modeText.indexOf('нравится') === -1)) return false;
-  return null;
+  return panel ? !!ymFindVibeMenuItem('shuffle', panel) : null;
 }
 
 function ymScanVibeContextMenu(panel) {
@@ -113,7 +110,7 @@ function ymScanVibeContextMenu(panel) {
   return {
     shuffleAvailable: !!shuffleBtn,
     shuffleOn: shuffleBtn ? ymReadVibeMenuShuffleOn(shuffleBtn) : null,
-    repeatMode: repeatBtn ? ymReadVibeMenuRepeatMode(repeatBtn) : 0
+    repeatMode: repeatBtn ? ymReadVibeMenuRepeatMode(repeatBtn) : null
   };
 }
 
@@ -135,7 +132,7 @@ function ymReadRepeatModeFromButton(button) {
 
 async function ymOpenVibeContextMenu() {
   var btn = ymFindVibeContextMenuButton();
-  if (!btn) return { success: false, message: 'Кнопка контекстного меню не найдена' };
+  if (!ymCanClick(btn)) return { success: false, message: 'Кнопка контекстного меню недоступна' };
 
   if (btn.getAttribute('aria-expanded') !== 'true') {
     btn.click();
@@ -151,44 +148,52 @@ async function ymOpenVibeContextMenu() {
   return { success: true, message: 'Меню уже открыто' };
 }
 
+function ymPublishVibeMenuState(snapshot) {
+  if (!snapshot) return;
+  var previous = window.__YM_AJAZZ_STATE || {};
+  window.__YM_AJAZZ_STATE = Object.assign({}, previous, snapshot, {
+    vibeActive: true,
+    version: (previous.version || 0) + 1
+  });
+  if (typeof ymAjazzNotify === 'function') ymAjazzNotify(JSON.stringify(window.__YM_AJAZZ_STATE));
+}
+
 async function ymToggleVibeMenuControl(fragment) {
   if (!ymIsVibePageActive()) return null;
-
-  if (fragment === 'shuffle') {
-    var available = ymDetectVibeShuffleAvailable();
-    if (available === false) {
-      return { success: false, message: 'Перемешивание недоступно в этом режиме', unavailable: true };
+  var toggle = ymFindVibeContextMenuButton();
+  var wasOpen = toggle && toggle.getAttribute('aria-expanded') === 'true';
+  try {
+    var opened = await ymOpenVibeContextMenu();
+    if (!opened.success) return opened;
+    var panel = ymFindVibeContextMenuPanel();
+    var button = panel ? ymFindVibeMenuItem(fragment, panel) : null;
+    if (!ymCanClick(button)) return { success: false, message: 'Управление недоступно', unavailable: true };
+    var before = fragment === 'shuffle' ? ymReadVibeMenuShuffleOn(button) : ymReadVibeMenuRepeatMode(button);
+    button.click();
+    var actual = null;
+    var snapshot = null;
+    var deadline = Date.now() + 1600;
+    for (var attempt = 0; attempt < 20 && Date.now() < deadline; attempt++) {
+      await ymWait(40);
+      panel = ymFindVibeContextMenuPanel();
+      if (!panel) {
+        var reopened = await ymOpenVibeContextMenu();
+        if (!reopened.success) break;
+        panel = ymFindVibeContextMenuPanel();
+      }
+      snapshot = ymScanVibeContextMenu(panel);
+      var value = snapshot ? (fragment === 'shuffle' ? snapshot.shuffleOn : snapshot.repeatMode) : null;
+      if (value !== null && value !== before) { actual = value; break; }
     }
+    if (actual !== null) ymPublishVibeMenuState(snapshot);
+    var result = { success: true, accepted: true, confirmed: actual !== null };
+    if (actual !== null) result.state = snapshot;
+    if (fragment === 'shuffle') result.shuffle = actual;
+    else result.mode = actual;
+    return result;
+  } finally {
+    if (!wasOpen) ymCloseVibeContextMenu();
   }
-
-  var openResult = await ymOpenVibeContextMenu();
-  if (!openResult.success) return openResult;
-
-  var panel = ymFindVibeContextMenuPanel();
-  var menuBtn = ymFindVibeMenuItem(fragment, panel || document);
-  if (!menuBtn) {
-    ymCloseVibeContextMenu();
-    return {
-      success: false,
-      message: fragment === 'shuffle' ? 'Перемешивание недоступно' : 'Повтор недоступен',
-      unavailable: fragment === 'shuffle'
-    };
-  }
-
-  menuBtn.click();
-  await ymWait(120);
-
-  var result = { success: true, message: 'Vibe menu: ' + fragment };
-  if (fragment === 'shuffle') {
-    var shuffleBtn = ymFindVibeMenuItem('shuffle', ymFindVibeContextMenuPanel() || document) || menuBtn;
-    result.shuffle = ymReadVibeMenuShuffleOn(shuffleBtn);
-  } else if (fragment === 'repeat') {
-    var repeatBtn = ymFindVibeMenuItem('repeat', ymFindVibeContextMenuPanel() || document) || menuBtn;
-    result.mode = ymReadVibeMenuRepeatMode(repeatBtn);
-  }
-
-  ymCloseVibeContextMenu();
-  return result;
 }
 
 function ymDetectSonataControlByFragment(fragment) {
@@ -232,8 +237,19 @@ async function ymToggleSonataControlByFragment(fragment) {
     if (!useEl) continue;
     var href = useEl.getAttribute('xlink:href') || useEl.getAttribute('href') || '';
     if (href.indexOf(fragment) !== -1 && !(fragment === 'repeat' && href.indexOf('shuffle') !== -1)) {
+      if (!ymCanClick(b)) return { success: false, message: 'Управление недоступно' };
+      var before = ymDetectSonataControlByFragment(fragment);
       b.click();
-      return { success: true, message: 'Sonata: ' + fragment };
+      var expected = fragment === 'shuffle' ? !before.shuffle : (before.mode + 1) % 3;
+      var actual = await ymWaitForState(function() {
+        var value = ymDetectSonataControlByFragment(fragment);
+        if (!value.ok) return null;
+        return fragment === 'shuffle' ? value.shuffle : value.mode;
+      }, before.ok ? expected : undefined);
+      var result = { success: true, accepted: true, confirmed: actual !== null };
+      if (fragment === 'shuffle') result.shuffle = actual;
+      else result.mode = actual;
+      return result;
     }
   }
   return { success: false, message: 'Кнопка ' + fragment + ' не найдена' };
@@ -242,7 +258,7 @@ async function ymToggleSonataControlByFragment(fragment) {
 async function ymToggleShuffle() {
   if (ymIsVibePageActive()) {
     var vibeResult = await ymToggleVibeMenuControl('shuffle');
-    if (vibeResult && vibeResult.success) return vibeResult;
+    return vibeResult;
   }
   return ymToggleSonataControlByFragment('shuffle');
 }
@@ -250,12 +266,16 @@ async function ymToggleShuffle() {
 async function ymToggleRepeat() {
   if (ymIsVibePageActive()) {
     var vibeResult = await ymToggleVibeMenuControl('repeat');
-    if (vibeResult && vibeResult.success) return vibeResult;
+    return vibeResult;
   }
   return ymToggleSonataControlByFragment('repeat');
 }
 
 function ymDetectShufflePressed() {
+  if (ymIsVibePageActive()) {
+    var observed = ymDetectVibeMenuControlState('shuffle');
+    if (observed.ok) return observed;
+  }
   if (window.__YM_AJAZZ_STATE && window.__YM_AJAZZ_STATE.vibeActive) {
     if (window.__YM_AJAZZ_STATE.shuffleAvailable === false) {
       return { ok: true, shuffle: false, unavailable: true };
@@ -264,8 +284,7 @@ function ymDetectShufflePressed() {
       return { ok: true, shuffle: !!window.__YM_AJAZZ_STATE.shuffleOn };
     }
   }
-  var sonata = ymDetectSonataControlByFragment('shuffle');
-  if (sonata.ok) return sonata;
+  if (!ymIsVibePageActive()) return ymDetectSonataControlByFragment('shuffle');
   if (ymIsVibePageActive()) {
     var vibeOpen = ymDetectVibeMenuControlState('shuffle');
     if (vibeOpen.ok) return vibeOpen;
@@ -277,11 +296,14 @@ function ymDetectShufflePressed() {
 }
 
 function ymDetectRepeatMode() {
+  if (ymIsVibePageActive()) {
+    var observed = ymDetectVibeMenuControlState('repeat');
+    if (observed.ok) return observed;
+  }
   if (window.__YM_AJAZZ_STATE && window.__YM_AJAZZ_STATE.vibeActive && window.__YM_AJAZZ_STATE.repeatMode !== null && window.__YM_AJAZZ_STATE.repeatMode !== undefined) {
     return { ok: true, mode: window.__YM_AJAZZ_STATE.repeatMode };
   }
-  var sonata = ymDetectSonataControlByFragment('repeat');
-  if (sonata.ok) return sonata;
+  if (!ymIsVibePageActive()) return ymDetectSonataControlByFragment('repeat');
   if (ymIsVibePageActive()) {
     var vibeOpen = ymDetectVibeMenuControlState('repeat');
     if (vibeOpen.ok) return vibeOpen;

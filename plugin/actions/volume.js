@@ -15,8 +15,8 @@ function getVolumeStep(context, actionKey) {
     });
 }
 
-const volumeInput = createInputCoalescer(async (_context, delta) => {
-    const result = await deps.yandexMusic.changeVolume(delta);
+const volumeInput = createInputCoalescer(async (_context, delta, signal) => {
+    const result = await deps.yandexMusic.changeVolume(delta, { signal });
     if (result?.success && typeof result.muted === 'boolean') {
         setOptimisticState('mute', result.muted ? 1 : 0);
     }
@@ -26,6 +26,7 @@ const volumeInput = createInputCoalescer(async (_context, delta) => {
 function createVolumeKeyActions(deltaSign, actionKey) {
     return {
         default: { volumeStep: 5 },
+        _willDisappear({ context }) { volumeInput.cancel(context); },
         _didReceiveSettings(data) {
             this.data[data.context] = Object.assign({ ...this.default }, data.payload.settings);
         },
@@ -33,10 +34,10 @@ function createVolumeKeyActions(deltaSign, actionKey) {
             const step = getVolumeStep(context, actionKey);
             try {
                 const result = await volumeInput.add(context, deltaSign * step);
-                if (!result) deps.plugin.showAlert(context);
+                if (!result) if (Actions.actions[context]) deps.plugin.showAlert(context);
             } catch (error) {
                 log.error('Ошибка при изменении громкости кнопкой:', error);
-                deps.plugin.showAlert(context);
+                if (Actions.actions[context]) deps.plugin.showAlert(context);
             }
         }
     };
@@ -49,7 +50,7 @@ async function toggleMuteOnEncoder(context) {
             setOptimisticState('mute', result.muted ? 1 : 0);
         }
     } else {
-        deps.plugin.showAlert(context);
+        if (Actions.actions[context]) deps.plugin.showAlert(context);
     }
 }
 
@@ -68,12 +69,13 @@ module.exports = function registerVolumeActions(plugin) {
             plugin.setTitle(context, '');
 
             const muted = await deps.yandexMusic.getMuteIsMuted();
-            if (muted !== null) {
+            if (typeof muted === 'boolean' && this.data[context]) {
                 plugin.setState(context, muted ? 1 : 0);
             }
         },
         _willDisappear({ context }) {
             log.info('YM Volume Encoder исчез:', context);
+            volumeInput.cancel(context);
             removeContext('volumeEncoder', context);
         },
         async keyUp({ context }) {
@@ -82,7 +84,7 @@ module.exports = function registerVolumeActions(plugin) {
                 await toggleMuteOnEncoder(context);
             } catch (error) {
                 log.error('Ошибка при переключении звука через кнопку энкодера:', error);
-                plugin.showAlert(context);
+                if (this.data[context]) plugin.showAlert(context);
             }
         },
         async dialDown({ context, payload }) {
@@ -91,7 +93,7 @@ module.exports = function registerVolumeActions(plugin) {
                 await toggleMuteOnEncoder(context);
             } catch (error) {
                 log.error('Ошибка при переключении звука через энкодер:', error);
-                plugin.showAlert(context);
+                if (this.data[context]) plugin.showAlert(context);
             }
         },
         async dialRotate({ context, payload }) {
@@ -116,11 +118,11 @@ module.exports = function registerVolumeActions(plugin) {
                     }
                 } else {
                     log.error('changeVolume вернул false');
-                    plugin.showAlert(context);
+                    if (this.data[context]) plugin.showAlert(context);
                 }
             } catch (error) {
                 log.error('Ошибка при изменении громкости через энкодер:', error);
-                plugin.showAlert(context);
+                if (this.data[context]) plugin.showAlert(context);
             }
         }
     });

@@ -1,635 +1,414 @@
 'use strict';
 
-const { log } = require('../utils/plugin');
+const { log } = require('./logger');
 const { deps } = require('./deps');
 const { buttonContexts } = require('./contexts');
 const { appState } = require('./app-state');
-const { getScrollingText } = require('./helpers');
-const { getTrackInfoTextSize, setTrackInfoDisplay, setTimeDisplay, clearAllDisplayCaches } = require('./display');
+const defaultDisplay = require('./display');
 const { getCoverDataUrl } = require('./cover');
+const { renderCoverProgress, renderTrackProgress } = require('./cover-progress');
+const { scrollingWindow } = require('./text-layout');
 const { parseTime, formatTime, projectTime } = require('./time-utils');
+const { getTrackIdentity, isSameTrack } = require('./track-identity');
 
-const DEFAULT_COVER_IMAGE = 'static/App-logo.png';
-const DISCONNECTED_TRACK_TEXT = 'Нет соединения';
+const POLL_MS = { playback: 5000, like: 10000, mute: 10000, time: 10000, metadata: 10000, shuffle: 15000, repeat: 15000 };
 
-const POLL_MS = {
-    playback: 5000,
-    like: 10000,
-    mute: 10000,
-    time: 10000,
-    metadata: 10000,
-    shuffle: 15000,
-    repeat: 15000
-};
-
-const state = {
-    timerId: null,
-    running: false,
-    due: Object.create(null),
-    inFlight: new Map(),
-    metadata: null,
-    metadataAt: 0,
-    metadataPromise: null,
-    mediaGeneration: 0,
-    mediaRefreshTimer: null,
-    mediaRefreshAttempts: 0,
-    refreshPreviousTitle: null,
-    coverGeneration: 0,
-    timer: null,
-    lastTimerText: '',
-    lastScrollAt: 0,
-    presenceUrlLookup: {
-        title: '',
-        checkedAt: 0,
-        failed: false
-    },
-    coverRetry: {
-        title: '',
-        timer: null,
-        attempts: 0,
-        maxAttempts: 40,
-        intervalMs: 500
-    }
-};
-
-function hasAnyContext() {
-    return Object.values(buttonContexts).some(contexts => contexts.length > 0);
-}
-
-function setButtonState(keys, value) {
-    for (const key of keys) {
-        buttonContexts[key].forEach(context => deps.plugin.setState(context, value));
-    }
-}
-
-function updateTrackInfoTitles() {
-    if (!appState.scrollingText.text) return;
-    buttonContexts.trackInfo.forEach(context => {
-        setTrackInfoDisplay(context, getScrollingText(
-            appState.scrollingText.text,
-            Math.floor(appState.scrollingText.position),
-            getTrackInfoTextSize(context)
-        ));
-    });
-    appState.scrollingText.position += appState.scrollingText.speed;
-    appState.scrollingText.frameCounter++;
-}
-
-function applyTrackInfo(trackInfo, force = false) {
-    if (!trackInfo?.title) return;
-    const fullText = trackInfo.artist ? `${trackInfo.artist} - ${trackInfo.title}` : trackInfo.title;
-    let changed = false;
-    if (appState.scrollingText.text !== fullText) {
-        appState.scrollingText.text = fullText;
-        appState.scrollingText.position = 0;
-        appState.scrollingText.frameCounter = 0;
-        changed = true;
-    }
-    if (force || changed || Date.now() - state.lastScrollAt >= 700) {
-        state.lastScrollAt = Date.now();
-        updateTrackInfoTitles();
-    }
-}
-
-function syncTimer(timeInfo, playing = state.timer?.playing) {
-    const position = parseTime(timeInfo?.progressValue) ?? parseTime(timeInfo?.currentTime);
-    const total = parseTime(timeInfo?.progressMax) ?? parseTime(timeInfo?.totalTime);
-    if (position === null || total === null) return;
-    state.timer = {
-        position,
-        total,
-        playing: !!playing,
-        syncedAt: Date.now()
+function createStateEngine({
+    getDeps,
+    contexts = buttonContexts,
+    display = defaultDisplay,
+    loadCover = getCoverDataUrl,
+    viewState = { lastTrackInfo: null, lastTimeInfo: null, scrollingText: { text: '', position: 0, speed: 1, frameCounter: 0 } },
+    now = Date.now
+}) {
+    const state = {
+        running: false, timerId: null, refreshTimer: null, retryTimer: null,
+        generation: 0, metadata: null, metadataAt: 0,
+        timer: null, playing: false, lastScrollAt: 0, lastTimerText: '',
+        buttonStates: new Map(), inFlight: new Map(), due: {},
+        coverKey: '', coverData: null, coverPromise: null, coverAttempts: 0,
+        progressCoverData: null, progressCoverStep: -1, progressCoverImage: null,
+        progressRingKey: '', progressRingImage: null,
+        lookupKey: '', lookupAt: 0
     };
-    renderTimer(true);
-}
+    const runtime = () => getDeps();
+    const coverProgressContexts = () => contexts.coverProgress || [];
+    const trackProgressContexts = () => contexts.trackProgress || [];
+    const progressContexts = () => coverProgressContexts().length + trackProgressContexts().length;
+    const hasCoverContexts = () => contexts.cover.length || coverProgressContexts().length;
 
-function renderTimer(force = false) {
-    if (!deps.yandexMusic.connected || !state.timer || buttonContexts.timeTotal.length === 0) return;
-    const position = projectTime(state.timer);
-    const current = formatTime(position);
-    const total = formatTime(state.timer.total);
-    const fingerprint = `${current}|${total}`;
-    if (!force && fingerprint === state.lastTimerText) return;
-    state.lastTimerText = fingerprint;
-    buttonContexts.timeTotal.forEach(context => setTimeDisplay(context, current, total));
-    appState.lastTimeInfo = { current, total };
-}
-
-function applyTrackInfoFromRemoteState(remote) {
-    if (!remote?.trackTitle) return;
-    syncPresenceMetadata(remote);
-    const cachedArtist = state.metadata?.title === remote.trackTitle ? state.metadata.artist : '';
-    const trackInfo = {
-        title: remote.trackTitle,
-        artist: remote.trackArtist || cachedArtist || '',
-        coverUrl: remote.coverUrl || state.metadata?.coverUrl,
-        trackUrl: remote.trackUrl || state.metadata?.trackUrl || ''
-    };
-    applyTrackInfo(trackInfo);
-    ensureCoverForTrack(trackInfo);
-}
-
-function syncPresenceMetadata(remote) {
-    if (!remote?.trackTitle) return;
-    const title = String(remote.trackTitle).trim();
-    if (!title) return;
-    const previous = state.metadata && state.metadata.title === title ? state.metadata : null;
-    const trackUrl = String(remote.trackUrl || previous?.trackUrl || '').trim();
-    state.metadata = {
-        title,
-        artist: String(remote.trackArtist || previous?.artist || '').trim(),
-        coverUrl: String(remote.coverUrl || previous?.coverUrl || '').trim(),
-        trackUrl
-    };
-    if (trackUrl) state.metadataAt = Date.now();
-}
-
-async function ensurePresenceTrackUrl() {
-    const remote = deps.yandexMusic.getRemoteState?.() || null;
-    if (remote?.trackTitle) syncPresenceMetadata(remote);
-    const title = String(state.metadata?.title || remote?.trackTitle || '').trim();
-    if (!title) return false;
-    if (String(state.metadata?.trackUrl || remote?.trackUrl || '').trim()) return true;
-
-    const lookup = state.presenceUrlLookup;
-    const now = Date.now();
-    if (lookup.title !== title) {
-        lookup.title = title;
-        lookup.checkedAt = 0;
-        lookup.failed = false;
+    function setButtonState(keys, value) {
+        for (const key of keys) {
+            for (const context of contexts[key]) {
+                const cacheKey = key + ':' + context;
+                if (state.buttonStates.get(cacheKey) === value) continue;
+                runtime().plugin.setState(context, value);
+                state.buttonStates.set(cacheKey, value);
+            }
+        }
     }
-    if (lookup.failed && now - lookup.checkedAt < 60000) return false;
-    if (now - lookup.checkedAt < 15000) return false;
 
-    lookup.checkedAt = now;
-    const trackInfo = await singleFlight('presence-track-url', () =>
-        deps.yandexMusic.getTrackInfo({ priority: 'background', quiet: true, key: 'presence-track-url' })
-    );
-    const trackUrl = String(trackInfo?.trackUrl || '').trim();
-    if (trackInfo?.title && trackInfo.title === title && trackUrl) {
+    function updateTrackText() {
+        const text = viewState.scrollingText.text;
+        if (!text) return;
+        for (const context of contexts.trackInfo) {
+            display.setTrackInfoDisplay(context, scrollingWindow(text, viewState.scrollingText.position,
+                display.getTrackInfoTextSize(context), display.getTrackInfoFontSize(context)));
+        }
+        viewState.scrollingText.position++;
+        state.lastScrollAt = now();
+    }
+
+    function applyTrackInfo(track) {
+        if (!track?.title) return;
+        const text = track.artist ? track.artist + ' - ' + track.title : track.title;
+        if (text !== viewState.scrollingText.text) {
+            viewState.scrollingText.text = text;
+            viewState.scrollingText.position = 0;
+            updateTrackText();
+        }
+    }
+
+    function acceptMetadata(track) {
+        if (!track?.title) return false;
+        if (state.metadata && !isSameTrack(state.metadata, track)) {
+            state.generation++;
+            state.timer = null;
+            state.coverKey = '';
+            state.coverAttempts = 0;
+            clearTimeout(state.retryTimer);
+            state.retryTimer = null;
+            state.lookupKey = '';
+            state.lookupAt = 0;
+        }
+        const previous = isSameTrack(state.metadata, track) ? state.metadata : null;
         state.metadata = {
-            title: trackInfo.title || state.metadata?.title || title,
-            artist: String(trackInfo.artist || state.metadata?.artist || '').trim(),
-            coverUrl: String(trackInfo.coverUrl || state.metadata?.coverUrl || '').trim(),
-            trackUrl
+            title: String(track.title).trim(),
+            artist: String(track.artist || previous?.artist || '').trim(),
+            coverUrl: String(track.coverUrl || previous?.coverUrl || '').trim(),
+            trackUrl: String(track.trackUrl || previous?.trackUrl || '').trim()
         };
-        state.metadataAt = Date.now();
-        appState.lastTrackInfo = trackInfo;
-        lookup.failed = false;
+        state.metadataAt = now();
+        viewState.lastTrackInfo = state.metadata;
+        applyTrackInfo(state.metadata);
+        ensureCover(state.metadata);
         return true;
     }
-    lookup.failed = true;
-    return false;
-}
 
-function applyYmRemoteState(remote) {
-    if (!remote) return;
-    if (remote.trackTitle) syncPresenceMetadata(remote);
-    if (remote.trackTitle && state.metadata?.title && remote.trackTitle !== state.metadata.title) {
-        state.metadataAt = 0;
-        state.presenceUrlLookup.title = '';
-        state.presenceUrlLookup.checkedAt = 0;
-        state.presenceUrlLookup.failed = false;
-        clearCoverRetry();
-        requestMediaRefresh(75);
+    function syncTimer(time, playing = state.playing) {
+        const total = parseTime(time?.totalTime) ?? parseTime(time?.progressMax);
+        const raw = parseTime(time?.progressValue);
+        const max = parseTime(time?.progressMax);
+        const position = raw !== null && max > 0 && total !== null ? raw * total / max : parseTime(time?.currentTime);
+        if (position === null || total === null || total < 0) return;
+        state.timer = { position: Math.max(0, Math.min(total, position)), total, playing: !!playing, syncedAt: now() };
+        renderTimer(true);
     }
-    if (remote.playing !== null && remote.playing !== undefined) {
-        setButtonState(['playPause'], remote.playing ? 1 : 0);
-        if (state.timer) {
-            state.timer.position = projectTime(state.timer);
-            state.timer.syncedAt = Date.now();
-            state.timer.playing = !!remote.playing;
+
+    function renderTimer(force = false) {
+        if (!runtime().yandexMusic.connected || !state.timer) return;
+        updateCoverProgress();
+        const current = formatTime(projectTime(state.timer, now()));
+        const total = formatTime(state.timer.total);
+        const key = current + '|' + total;
+        if (!force && key === state.lastTimerText) return;
+        state.lastTimerText = key;
+        for (const context of contexts.timeTotal) display.setTimeDisplay(context, current, total);
+        viewState.lastTimeInfo = { current, total };
+    }
+
+    async function read(key, task) {
+        if (state.inFlight.has(key)) return state.inFlight.get(key);
+        const generation = state.generation;
+        const promise = Promise.resolve().then(task).then(value => generation === state.generation ? value : null)
+            .finally(() => { if (state.inFlight.get(key) === promise) state.inFlight.delete(key); });
+        state.inFlight.set(key, promise);
+        return promise;
+    }
+
+    async function getMetadata(force = false) {
+        if (!force && state.metadata && now() - state.metadataAt < 2000) return state.metadata;
+        const value = await read('metadata', () => runtime().yandexMusic.getTrackInfo());
+        if (value?.title) acceptMetadata(value);
+        return value;
+    }
+
+    function deliverCover(data) {
+        for (const context of contexts.cover) display.setCoverDisplay(context, data);
+        updateCoverProgress();
+    }
+
+    function updateCoverProgress() {
+        if (!progressContexts()) return;
+        const ratio = state.timer?.total > 0 ? Math.max(0, Math.min(1, projectTime(state.timer, now()) / state.timer.total)) : 0;
+        const step = Math.floor(ratio * 256);
+        if (coverProgressContexts().length && (!state.progressCoverImage || state.progressCoverData !== state.coverData || state.progressCoverStep !== step)) {
+            state.progressCoverData = state.coverData;
+            state.progressCoverStep = step;
+            state.progressCoverImage = renderCoverProgress(state.coverData, step);
         }
-    }
-    if (remote.liked !== null && remote.liked !== undefined) setButtonState(['like'], remote.liked ? 1 : 0);
-    if (remote.muted !== null && remote.muted !== undefined) setButtonState(['mute', 'volumeEncoder'], remote.muted ? 1 : 0);
-    if (remote.shuffleOn !== null && remote.shuffleOn !== undefined) {
-        setButtonState(['shuffle'], remote.shuffleAvailable === false ? 0 : (remote.shuffleOn ? 1 : 0));
-    }
-    if (remote.repeatMode !== null && remote.repeatMode !== undefined) setButtonState(['repeat'], remote.repeatMode);
-    if (remote.trackTitle) applyTrackInfoFromRemoteState(remote);
-    if (remote.progressValue !== null && remote.progressValue !== undefined) syncTimer(remote, remote.playing);
-}
-
-async function singleFlight(key, fn) {
-    if (state.inFlight.has(key)) return state.inFlight.get(key);
-    const promise = Promise.resolve().then(fn).finally(() => state.inFlight.delete(key));
-    state.inFlight.set(key, promise);
-    return promise;
-}
-
-async function checkPlaybackState() {
-    if (buttonContexts.playPause.length === 0 && buttonContexts.timeTotal.length === 0) return;
-    const playing = await singleFlight('playback', () => deps.yandexMusic.getPlaybackIsPlaying());
-    if (playing === null) return;
-    setButtonState(['playPause'], playing ? 1 : 0);
-    if (state.timer) {
-        state.timer.position = projectTime(state.timer);
-        state.timer.syncedAt = Date.now();
-        state.timer.playing = playing;
-    }
-}
-
-async function checkLikeState() {
-    if (buttonContexts.like.length === 0) return;
-    const liked = await singleFlight('like', () => deps.yandexMusic.getLikeIsLiked());
-    if (liked !== null) setButtonState(['like'], liked ? 1 : 0);
-}
-
-async function checkMuteState() {
-    if (buttonContexts.mute.length === 0 && buttonContexts.volumeEncoder.length === 0) return;
-    const muted = await singleFlight('mute', () => deps.yandexMusic.getMuteIsMuted());
-    if (muted !== null) setButtonState(['mute', 'volumeEncoder'], muted ? 1 : 0);
-}
-
-async function checkShuffleState() {
-    if (buttonContexts.shuffle.length === 0) return;
-    const pressed = await singleFlight('shuffle', () => deps.yandexMusic.getShufflePressed());
-    if (pressed !== null) setButtonState(['shuffle'], pressed ? 1 : 0);
-}
-
-async function checkRepeatState() {
-    if (buttonContexts.repeat.length === 0) return;
-    const mode = await singleFlight('repeat', () => deps.yandexMusic.getRepeatMode());
-    if (mode !== null) setButtonState(['repeat'], mode);
-}
-
-async function getMetadata(force = false) {
-    if (!force && state.metadata && Date.now() - state.metadataAt < 2000) return state.metadata;
-    if (state.metadataPromise) return state.metadataPromise;
-    const generation = state.mediaGeneration;
-    state.metadataPromise = deps.yandexMusic.getTrackInfo()
-        .then(value => {
-            if (value?.title && generation === state.mediaGeneration) {
-                state.metadata = value;
-                state.metadataAt = Date.now();
-                appState.lastTrackInfo = value;
+        for (const context of coverProgressContexts()) display.setCoverDisplay(context, state.progressCoverImage);
+        if (trackProgressContexts().length) {
+            const key = step + '|' + Math.min(100, Math.floor(ratio * 100 + 1e-8));
+            if (state.progressRingKey !== key || !state.progressRingImage) {
+                state.progressRingKey = key;
+                state.progressRingImage = renderTrackProgress(ratio);
             }
-            return value;
-        })
-        .finally(() => {
-            state.metadataPromise = null;
-        });
-    return state.metadataPromise;
-}
-
-async function checkTrackInfoState() {
-    if (buttonContexts.trackInfo.length === 0) return;
-    if (deps.yandexMusic.isWarmingUp?.()) return;
-    const remote = deps.yandexMusic.getRemoteState();
-    if (remote?.trackTitle) {
-        applyTrackInfoFromRemoteState(remote);
-        return;
+            for (const context of trackProgressContexts()) display.setCoverDisplay(context, state.progressRingImage);
+        }
     }
-    const trackInfo = await getMetadata();
-    if (trackInfo?.title) applyTrackInfo(trackInfo, true);
-    else if (appState.scrollingText.text) updateTrackInfoTitles();
-    else buttonContexts.trackInfo.forEach(context => setTrackInfoDisplay(context, 'Нет данных'));
-}
 
-async function checkTimeState() {
-    if (buttonContexts.timeTotal.length === 0) return;
-    if (deps.yandexMusic.isWarmingUp?.()) return;
-    const timeInfo = await singleFlight('time', () => deps.yandexMusic.getTrackTime());
-    if (timeInfo) syncTimer(timeInfo);
-}
-
-async function applyCover(trackInfo) {
-    if (!trackInfo?.coverUrl || buttonContexts.cover.length === 0) return false;
-    const generation = ++state.coverGeneration;
-    const expectedCoverUrl = trackInfo.coverUrl;
-    const dataUrl = await getCoverDataUrl(expectedCoverUrl);
-    if (generation !== state.coverGeneration) return false;
-    buttonContexts.cover.forEach(context => deps.plugin.setImage(context, dataUrl));
-    clearCoverRetry();
-    return true;
-}
-
-function clearCoverRetry() {
-    if (state.coverRetry.timer) clearTimeout(state.coverRetry.timer);
-    state.coverRetry.timer = null;
-    state.coverRetry.attempts = 0;
-    state.coverRetry.title = '';
-}
-
-function scheduleCoverRetry(expectedTitle) {
-    if (!expectedTitle || buttonContexts.cover.length === 0 || !deps.yandexMusic.connected) return;
-    if (state.coverRetry.title !== expectedTitle) {
-        clearCoverRetry();
-        state.coverRetry.title = expectedTitle;
+    function resetCover() {
+        state.coverKey = '';
+        state.coverData = null;
+        deliverCover('static/App-logo.png');
     }
-    if (state.coverRetry.timer) return;
 
-    const attempt = async () => {
-        if (!deps.yandexMusic.connected || buttonContexts.cover.length === 0) {
-            clearCoverRetry();
+    function scheduleCoverRetry(track) {
+        if (state.retryTimer || state.coverAttempts >= 12 || !hasCoverContexts()) return;
+        const generation = state.generation;
+        const identity = getTrackIdentity(track);
+        state.retryTimer = setTimeout(async () => {
+            state.retryTimer = null;
+            if (generation !== state.generation || !runtime().yandexMusic.connected || !hasCoverContexts()) return;
+            state.coverAttempts++;
+            try {
+                const value = await getMetadata(true);
+                if (generation !== state.generation || !isSameTrack(state.metadata, track)) return;
+                if (value?.coverUrl && getTrackIdentity(value) === identity) ensureCover(value);
+                else scheduleCoverRetry(track);
+            } catch (error) {
+                log.debug('Cover retry:', error.message);
+                if (generation === state.generation) scheduleCoverRetry(track);
+            }
+        }, Math.min(5000, 500 * 2 ** Math.min(state.coverAttempts, 3)));
+    }
+
+    function ensureCover(track) {
+        if (!hasCoverContexts() || !track?.title) return;
+        if (!track.coverUrl) {
+            resetCover();
+            scheduleCoverRetry(track);
             return;
         }
+        if (state.coverData) deliverCover(state.coverData);
+        const key = getTrackIdentity(track) + '|' + track.coverUrl;
+        if (state.coverKey === key && state.coverData) return;
+        if (state.coverPromise?.key === key) return;
+        const generation = state.generation;
+        const promise = loadCover(track.coverUrl).then(data => {
+            if (generation !== state.generation || !isSameTrack(state.metadata, track) || !runtime().yandexMusic.connected) return;
+            if (key !== getTrackIdentity(state.metadata) + '|' + state.metadata.coverUrl) return;
+            state.coverKey = key;
+            state.coverData = data;
+            state.coverAttempts = 0;
+            clearTimeout(state.retryTimer);
+            state.retryTimer = null;
+            deliverCover(data);
+        }).catch(error => {
+            log.debug('Cover download:', error.message);
+            if (generation === state.generation && runtime().yandexMusic.connected
+                && key === getTrackIdentity(state.metadata) + '|' + state.metadata?.coverUrl) {
+                resetCover();
+                scheduleCoverRetry(track);
+            }
+        }).finally(() => { if (state.coverPromise?.promise === promise) state.coverPromise = null; });
+        state.coverPromise = { key, promise };
+    }
 
-        const currentTitle = state.coverRetry.title;
-        if (!currentTitle) return;
-
-        const remote = deps.yandexMusic.getRemoteState?.() || null;
-        const remoteCover = String(remote?.coverUrl || '').trim();
-        if (remoteCover && remote?.trackTitle === currentTitle) {
-            const trackInfo = {
-                title: currentTitle,
-                artist: String(state.metadata?.artist || remote.trackArtist || '').trim(),
-                coverUrl: remoteCover,
-                trackUrl: String(state.metadata?.trackUrl || remote.trackUrl || '').trim()
-            };
-            state.metadata = { ...(state.metadata || {}), ...trackInfo };
-            state.metadataAt = Date.now();
-            appState.lastTrackInfo = trackInfo;
-            if (await applyCover(trackInfo)) return;
+    function applyYmRemoteState(remote) {
+        if (!remote) return;
+        const changed = remote.trackTitle && state.metadata && !isSameTrack(state.metadata, remote);
+        if (remote.trackTitle) acceptMetadata({ title: remote.trackTitle, artist: remote.trackArtist,
+            coverUrl: remote.coverUrl, trackUrl: remote.trackUrl });
+        if (changed) requestMediaRefresh(75);
+        if (typeof remote.playing === 'boolean') {
+            state.playing = remote.playing;
+            setButtonState(['playPause'], remote.playing ? 1 : 0);
+            if (state.timer) {
+                state.timer.position = projectTime(state.timer, now());
+                state.timer.syncedAt = now();
+                state.timer.playing = remote.playing;
+            }
         }
-
-        const trackInfo = await deps.yandexMusic.getTrackInfo({
-            priority: 'background',
-            quiet: true,
-            key: 'cover-retry'
-        });
-        if (trackInfo?.coverUrl && trackInfo.title === currentTitle) {
-            state.metadata = { ...(state.metadata || {}), ...trackInfo };
-            state.metadataAt = Date.now();
-            appState.lastTrackInfo = trackInfo;
-            if (await applyCover(trackInfo)) return;
-        }
-
-        state.coverRetry.attempts++;
-        if (state.coverRetry.attempts >= state.coverRetry.maxAttempts) {
-            log.warn(`Обложка для «${currentTitle}» не появилась за отведённое время`);
-            clearCoverRetry();
-            return;
-        }
-
-        state.coverRetry.timer = setTimeout(() => {
-            state.coverRetry.timer = null;
-            attempt().catch(error => log.error('Ошибка ожидания обложки:', error));
-        }, state.coverRetry.intervalMs);
-    };
-
-    state.coverRetry.timer = setTimeout(() => {
-        state.coverRetry.timer = null;
-        attempt().catch(error => log.error('Ошибка ожидания обложки:', error));
-    }, state.coverRetry.intervalMs);
-}
-
-function ensureCoverForTrack(trackInfo) {
-    if (!trackInfo?.title || buttonContexts.cover.length === 0) return;
-    if (trackInfo.coverUrl) {
-        state.metadata = { ...(state.metadata || {}), ...trackInfo };
-        state.metadataAt = Date.now();
-        appState.lastTrackInfo = trackInfo;
-        applyCover(trackInfo).catch(error => log.error('Ошибка применения обложки:', error));
-        return;
-    }
-    scheduleCoverRetry(trackInfo.title);
-}
-
-async function checkCoverState() {
-    if (buttonContexts.cover.length === 0) return;
-    if (deps.yandexMusic.isWarmingUp?.()) return;
-    const trackInfo = await getMetadata();
-    ensureCoverForTrack(trackInfo);
-}
-
-async function checkMetadataState() {
-    if (buttonContexts.trackInfo.length === 0 && buttonContexts.cover.length === 0) return;
-    if (deps.yandexMusic.isWarmingUp?.()) return;
-    const previousUrl = state.metadata?.coverUrl;
-    const trackInfo = await getMetadata(true);
-    if (!trackInfo) return;
-    if (buttonContexts.trackInfo.length) applyTrackInfo(trackInfo);
-    if (buttonContexts.cover.length) {
-        if (trackInfo.coverUrl) {
-            await applyCover(trackInfo);
-        } else {
-            scheduleCoverRetry(trackInfo.title);
-        }
-    }
-}
-
-async function refreshMediaState() {
-    const generation = ++state.mediaGeneration;
-    state.metadata = null;
-    state.metadataAt = 0;
-    state.metadataPromise = null;
-    state.coverGeneration++;
-
-    const trackInfo = await deps.yandexMusic.getTrackInfo({ priority: 'sync' });
-    if (generation !== state.mediaGeneration) return;
-    if (trackInfo?.title && trackInfo.title === state.refreshPreviousTitle && state.mediaRefreshAttempts < 3) {
-        const retryDelay = 150 * (2 ** state.mediaRefreshAttempts++);
-        state.mediaRefreshTimer = setTimeout(() => {
-            state.mediaRefreshTimer = null;
-            refreshMediaState().catch(error => log.error('Ошибка повторной синхронизации трека:', error));
-        }, retryDelay);
-        return;
-    }
-    let coverPromise = Promise.resolve();
-    if (trackInfo?.title) {
-        state.metadata = trackInfo;
-        state.metadataAt = Date.now();
-        appState.lastTrackInfo = trackInfo;
-        if (buttonContexts.trackInfo.length) applyTrackInfo(trackInfo, true);
-        if (buttonContexts.cover.length) {
-            coverPromise = trackInfo.coverUrl
-                ? applyCover(trackInfo).catch(error => log.error('Ошибка быстрой загрузки обложки:', error))
-                : Promise.resolve(scheduleCoverRetry(trackInfo.title));
-        }
-    }
-    state.refreshPreviousTitle = null;
-    state.mediaRefreshAttempts = 0;
-
-    if (buttonContexts.like.length) {
-        const liked = await deps.yandexMusic.getLikeIsLiked({ priority: 'sync' });
-        if (generation === state.mediaGeneration && liked !== null) {
-            setButtonState(['like'], liked ? 1 : 0);
-        }
+        if (typeof remote.liked === 'boolean') setButtonState(['like'], remote.liked ? 1 : 0);
+        if (typeof remote.muted === 'boolean') setButtonState(['mute', 'volumeEncoder'], remote.muted ? 1 : 0);
+        if (typeof remote.shuffleOn === 'boolean') setButtonState(['shuffle'], remote.shuffleAvailable === false ? 0 : Number(remote.shuffleOn));
+        if (Number.isInteger(remote.repeatMode) && remote.repeatMode >= 0 && remote.repeatMode <= 2) setButtonState(['repeat'], remote.repeatMode);
+        if (remote.currentTime != null || remote.progressValue != null) syncTimer(remote, remote.playing);
+        updateCoverProgress();
     }
 
-    const timeInfo = await deps.yandexMusic.getTrackTime({ priority: 'sync' });
-    if (generation === state.mediaGeneration && timeInfo) syncTimer(timeInfo);
-    await coverPromise;
-}
-
-function requestMediaRefresh(delayMs = 100) {
-    if (!state.mediaRefreshTimer) {
-        state.refreshPreviousTitle = state.metadata?.title || appState.lastTrackInfo?.title || null;
-        state.mediaRefreshAttempts = 0;
-    }
-    clearTimeout(state.mediaRefreshTimer);
-    state.mediaRefreshTimer = setTimeout(() => {
-        state.mediaRefreshTimer = null;
-        refreshMediaState().catch(error => log.error('Ошибка быстрой синхронизации трека:', error));
-    }, delayMs);
-}
-
-function markDue(key) {
-    state.due[key] = 0;
-}
-
-async function runDueTask(key, interval, fn, needed) {
-    if (!needed || Date.now() < (state.due[key] || 0)) return;
-    state.due[key] = Date.now() + interval;
-    try {
-        await fn();
-    } catch (error) {
-        log.error(`Ошибка синхронизации ${key}:`, error);
-    }
-}
-
-async function schedulerTick() {
-    if (!state.running) return;
-    if (hasAnyContext()) {
-        const now = Date.now();
-        renderTimer();
-        if (buttonContexts.trackInfo.length && deps.yandexMusic.connected && now - state.lastScrollAt >= 700) {
-            state.lastScrollAt = now;
-            updateTrackInfoTitles();
-        }
-        await runDueTask('playback', POLL_MS.playback, checkPlaybackState,
-            buttonContexts.playPause.length > 0 || buttonContexts.timeTotal.length > 0);
-        await runDueTask('like', POLL_MS.like, checkLikeState, buttonContexts.like.length > 0);
-        await runDueTask('mute', POLL_MS.mute, checkMuteState,
-            buttonContexts.mute.length > 0 || buttonContexts.volumeEncoder.length > 0);
-        await runDueTask('time', POLL_MS.time, checkTimeState, buttonContexts.timeTotal.length > 0);
-        await runDueTask('metadata', POLL_MS.metadata, checkMetadataState,
-            buttonContexts.trackInfo.length > 0 || buttonContexts.cover.length > 0);
-        await runDueTask('shuffle', POLL_MS.shuffle, checkShuffleState, buttonContexts.shuffle.length > 0);
-        await runDueTask('repeat', POLL_MS.repeat, checkRepeatState, buttonContexts.repeat.length > 0);
-    }
-    state.timerId = setTimeout(schedulerTick, 250);
-}
-
-function startStateChecks() {
-    if (state.running) return;
-    state.running = true;
-    state.timerId = setTimeout(schedulerTick, 0);
-}
-
-function stopStateChecks() {
-    state.running = false;
-    if (state.timerId) clearTimeout(state.timerId);
-    if (state.mediaRefreshTimer) clearTimeout(state.mediaRefreshTimer);
-    clearCoverRetry();
-    state.timerId = null;
-    state.mediaRefreshTimer = null;
-}
-
-async function resyncAllStates() {
-    Object.keys(POLL_MS).forEach(markDue);
-    await deps.yandexMusic.refreshRemoteState().catch(() => null);
-}
-
-function resetDisconnectedState() {
-    if (state.mediaRefreshTimer) {
-        clearTimeout(state.mediaRefreshTimer);
-        state.mediaRefreshTimer = null;
-    }
-    clearCoverRetry();
-
-    state.mediaGeneration++;
-    state.coverGeneration++;
-    state.metadata = null;
-    state.metadataAt = 0;
-    state.metadataPromise = null;
-    state.timer = null;
-    state.lastTimerText = '';
-    state.lastScrollAt = 0;
-    state.refreshPreviousTitle = null;
-    state.mediaRefreshAttempts = 0;
-    state.presenceUrlLookup.title = '';
-    state.presenceUrlLookup.checkedAt = 0;
-    state.presenceUrlLookup.failed = false;
-    state.inFlight.clear();
-
-    appState.lastTrackInfo = null;
-    appState.lastTimeInfo = null;
-    appState.scrollingText.text = '';
-    appState.scrollingText.position = 0;
-    appState.scrollingText.frameCounter = 0;
-
-    clearAllDisplayCaches();
-
-    setButtonState(['playPause'], 0);
-    setButtonState(['like'], 0);
-    setButtonState(['mute', 'volumeEncoder'], 0);
-    setButtonState(['shuffle'], 0);
-    setButtonState(['repeat'], 0);
-
-    buttonContexts.timeTotal.forEach(context => setTimeDisplay(context, '00:00', '00:00'));
-    buttonContexts.trackInfo.forEach(context => setTrackInfoDisplay(context, DISCONNECTED_TRACK_TEXT));
-    buttonContexts.cover.forEach(context => deps.plugin.setImage(context, DEFAULT_COVER_IMAGE));
-
-    log.info('Состояние кнопок сброшено: Яндекс Музыка отключена');
-}
-
-function setOptimisticState(kind, value) {
-    const mapping = {
-        playback: ['playPause'],
-        like: ['like'],
-        mute: ['mute', 'volumeEncoder'],
-        shuffle: ['shuffle'],
-        repeat: ['repeat']
-    };
-    if (mapping[kind]) setButtonState(mapping[kind], value);
-    markDue(kind);
-}
-
-function getPresenceSnapshot() {
-    const remote = deps.yandexMusic.getRemoteState?.() || null;
-    const title = state.metadata?.title || remote?.trackTitle || '';
-    const artist = state.metadata?.artist || remote?.trackArtist || '';
-    const coverUrl = state.metadata?.coverUrl || remote?.coverUrl || '';
-    const trackUrl = state.metadata?.trackUrl || remote?.trackUrl || '';
-    const playing = remote?.playing !== null && remote?.playing !== undefined
-        ? !!remote.playing
-        : !!state.timer?.playing;
-
-    let positionSec = null;
-    let totalSec = null;
-    if (state.timer) {
-        positionSec = projectTime(state.timer);
-        totalSec = state.timer.total;
-    } else {
-        positionSec = parseTime(remote?.progressValue) ?? parseTime(remote?.currentTime);
-        totalSec = parseTime(remote?.progressMax) ?? parseTime(remote?.totalTime);
+    async function checkPlaybackState() {
+        if (!contexts.playPause.length && !contexts.timeTotal.length && !progressContexts()) return;
+        const playing = await read('playback', () => runtime().yandexMusic.getPlaybackIsPlaying());
+        if (typeof playing === 'boolean') applyYmRemoteState({ playing });
     }
 
-    if (!String(title).trim()) return null;
+    async function checkBooleanState(key, method, keys) {
+        if (!keys.some(name => contexts[name].length)) return;
+        const value = await read(key, () => runtime().yandexMusic[method]());
+        if (typeof value === 'boolean') setButtonState(keys, Number(value));
+    }
+
+    const checkLikeState = () => checkBooleanState('like', 'getLikeIsLiked', ['like']);
+    const checkMuteState = () => checkBooleanState('mute', 'getMuteIsMuted', ['mute', 'volumeEncoder']);
+    const checkShuffleState = () => checkBooleanState('shuffle', 'getShufflePressed', ['shuffle']);
+
+    async function checkRepeatState() {
+        if (!contexts.repeat.length) return;
+        const mode = await read('repeat', () => runtime().yandexMusic.getRepeatMode());
+        if (Number.isInteger(mode) && mode >= 0 && mode <= 2) setButtonState(['repeat'], mode);
+    }
+
+    async function checkTrackInfoState() {
+        if (!contexts.trackInfo.length || runtime().yandexMusic.isWarmingUp?.()) return;
+        const remote = runtime().yandexMusic.getRemoteState();
+        if (remote?.trackTitle) applyYmRemoteState(remote);
+        else await getMetadata();
+        if (state.metadata) updateTrackText();
+        else for (const context of contexts.trackInfo) display.setTrackInfoDisplay(context, 'Нет данных');
+    }
+
+    async function checkTimeState() {
+        if ((!contexts.timeTotal.length && !progressContexts()) || runtime().yandexMusic.isWarmingUp?.()) return;
+        const time = await read('time', () => runtime().yandexMusic.getTrackTime());
+        if (time) syncTimer(time);
+    }
+
+    async function checkCoverState() {
+        if (!hasCoverContexts() || runtime().yandexMusic.isWarmingUp?.()) return;
+        const track = state.metadata || await getMetadata();
+        if (track) ensureCover(track);
+        updateCoverProgress();
+    }
+
+    async function refreshMediaState() {
+        await getMetadata(true);
+        await Promise.all([checkLikeState(), checkTimeState()]);
+    }
+
+    function requestMediaRefresh(delayMs = 100) {
+        if (state.refreshTimer) return;
+        state.refreshTimer = setTimeout(() => {
+            state.refreshTimer = null;
+            refreshMediaState().catch(error => log.debug('Media refresh:', error.message));
+        }, delayMs);
+    }
+
+    function schedulerTick() {
+        if (!state.running || !runtime().yandexMusic.connected) return;
+        try {
+            renderTimer();
+            if (contexts.trackInfo.length && now() - state.lastScrollAt >= 700) updateTrackText();
+            const tasks = [
+                ['playback', checkPlaybackState, contexts.playPause.length || contexts.timeTotal.length || progressContexts()],
+                ['like', checkLikeState, contexts.like.length],
+                ['mute', checkMuteState, contexts.mute.length || contexts.volumeEncoder.length],
+                ['time', checkTimeState, contexts.timeTotal.length || progressContexts()],
+                ['metadata', () => getMetadata(true), contexts.trackInfo.length || hasCoverContexts()],
+                ['shuffle', checkShuffleState, contexts.shuffle.length],
+                ['repeat', checkRepeatState, contexts.repeat.length]
+            ];
+            for (const [key, task, needed] of tasks) {
+                if (!needed || now() < (state.due[key] || 0) || state.inFlight.has(key)) continue;
+                state.due[key] = now() + POLL_MS[key];
+                task().catch(error => log.debug('State poll ' + key + ':', error.message));
+            }
+        } catch (error) { log.error('Display update:', error); }
+    }
+
+    function stopStateChecks() {
+        state.running = false;
+        clearInterval(state.timerId);
+        clearTimeout(state.refreshTimer);
+        clearTimeout(state.retryTimer);
+        state.timerId = null;
+        state.refreshTimer = null;
+        state.retryTimer = null;
+        state.generation++;
+    }
+
+    function resetDisconnectedState() {
+        state.generation++;
+        clearTimeout(state.refreshTimer);
+        clearTimeout(state.retryTimer);
+        state.refreshTimer = null;
+        state.retryTimer = null;
+        state.metadata = null;
+        state.timer = null;
+        state.playing = false;
+        state.coverKey = '';
+        state.coverData = null;
+        state.coverPromise = null;
+        state.coverAttempts = 0;
+        state.lastTimerText = '';
+        state.buttonStates.clear();
+        state.inFlight.clear();
+        state.due = {};
+        viewState.lastTrackInfo = null;
+        viewState.lastTimeInfo = null;
+        viewState.scrollingText.text = '';
+        viewState.scrollingText.position = 0;
+        display.clearAllDisplayCaches();
+        for (const key of ['playPause', 'like', 'shuffle', 'repeat', 'mute', 'volumeEncoder']) setButtonState([key], 0);
+        for (const context of contexts.trackInfo) display.setTrackInfoDisplay(context, 'Нет связи');
+        for (const context of contexts.timeTotal) display.setTimeDisplay(context, '--:--', '--:--');
+        deliverCover('static/App-logo.png');
+    }
+
+    function getPresenceSnapshot() {
+        const remote = runtime().yandexMusic.getRemoteState?.();
+        const metadata = state.metadata;
+        if (!metadata?.title) return null;
+        return { ...metadata, playing: typeof remote?.playing === 'boolean' ? remote.playing : !!state.timer?.playing,
+            positionSec: state.timer ? projectTime(state.timer, now()) : null, totalSec: state.timer?.total ?? null };
+    }
+
+    async function ensurePresenceTrackUrl() {
+        if (!state.metadata?.title || state.metadata.trackUrl) return !!state.metadata?.trackUrl;
+        const key = getTrackIdentity(state.metadata);
+        if (key === state.lookupKey && now() - state.lookupAt < 15000) return false;
+        state.lookupKey = key;
+        state.lookupAt = now();
+        const generation = state.generation;
+        const track = await runtime().yandexMusic.getTrackInfo({ priority: 'background', quiet: true, key: 'presence-url' });
+        if (generation !== state.generation || !isSameTrack(track, state.metadata)) return false;
+        acceptMetadata(track);
+        return !!state.metadata.trackUrl;
+    }
+
     return {
-        title: String(title).trim(),
-        artist: String(artist || '').trim(),
-        coverUrl: String(coverUrl || '').trim(),
-        trackUrl: String(trackUrl || '').trim(),
-        playing,
-        positionSec,
-        totalSec
+        applyYmRemoteState,
+        applyTrackInfoFromRemoteState: applyYmRemoteState,
+        checkPlaybackState, checkLikeState, checkMuteState, checkShuffleState, checkRepeatState,
+        checkTrackInfoState, checkTimeState, checkCoverState,
+        startStateChecks() {
+            if (state.running) return;
+            state.running = true;
+            state.timerId = setInterval(schedulerTick, 250);
+        },
+        stopStateChecks,
+        async resyncAllStates() {
+            state.due = {};
+            await runtime().yandexMusic.refreshRemoteState();
+        },
+        resetDisconnectedState,
+        requestMediaRefresh,
+        setOptimisticState(kind, value) {
+            const mapping = { playback: ['playPause'], like: ['like'], mute: ['mute', 'volumeEncoder'], shuffle: ['shuffle'], repeat: ['repeat'] };
+            if (kind === 'playback') applyYmRemoteState({ playing: !!value });
+            else if (mapping[kind]) setButtonState(mapping[kind], value);
+            state.due[kind] = 0;
+        },
+        getPresenceSnapshot,
+        ensurePresenceTrackUrl,
+        forgetContext(context) {
+            display.clearDisplayCache(context);
+            for (const key of state.buttonStates.keys()) if (key.endsWith(':' + context)) state.buttonStates.delete(key);
+        }
     };
 }
 
-module.exports = {
-    applyYmRemoteState,
-    applyTrackInfoFromRemoteState,
-    checkPlaybackState,
-    checkLikeState,
-    checkMuteState,
-    checkShuffleState,
-    checkRepeatState,
-    checkTrackInfoState,
-    checkTimeState,
-    checkCoverState,
-    startStateChecks,
-    stopStateChecks,
-    resyncAllStates,
-    resetDisconnectedState,
-    requestMediaRefresh,
-    setOptimisticState,
-    getPresenceSnapshot,
-    ensurePresenceTrackUrl,
-    formatTime,
-    parseTime
-};
+const runtime = createStateEngine({ getDeps: () => deps, viewState: appState });
+module.exports = { ...runtime, createStateEngine, parseTime, formatTime };

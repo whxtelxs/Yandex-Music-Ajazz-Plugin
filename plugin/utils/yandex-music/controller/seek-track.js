@@ -1,6 +1,6 @@
 'use strict';
 
-const { log } = require('../../plugin');
+const { log } = require('../../../lib/logger');
 
 module.exports = {
   async getTrackInfo(options = {}) {
@@ -102,11 +102,12 @@ module.exports = {
     }
   },
 
-  async seekRelative(deltaTicks) {
+  async seekRelative(deltaTicks, options = {}) {
     try {
-      const seekDelta = deltaTicks * 5;
+      const seekDelta = Math.max(-3600, Math.min(3600, Number(deltaTicks) * 5));
+      if (!Number.isFinite(seekDelta)) return false;
       log.info(`Относительная перемотка: ${seekDelta} секунд`);
-      const value = await this._evaluateDom(`return ymSeekRelative(${seekDelta});`, { priority: 'user' });
+      const value = await this._evaluateDom(`return ymSeekRelative(${seekDelta});`, { priority: 'user', signal: options.signal });
       if (value && value.success) {
         log.info(`Перемотка выполнена: ${value.oldPosition} -> ${value.newPosition} (delta: ${value.delta})`);
         return true;

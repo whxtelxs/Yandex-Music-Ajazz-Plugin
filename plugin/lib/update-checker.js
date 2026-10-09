@@ -26,38 +26,46 @@ function compareVersions(left, right) {
     return a.patch - b.patch;
 }
 
-function requestJson(url, timeoutMs = 12000) {
+function requestJson(url, timeoutMs = 12000, redirects = 0, deadline = Date.now() + timeoutMs) {
     return new Promise((resolve, reject) => {
-        const request = https.get(url, {
-            headers: {
-                Accept: 'application/vnd.github+json',
-                'User-Agent': USER_AGENT
-            },
-            timeout: timeoutMs
+        const remaining = deadline - Date.now();
+        if (redirects > 3 || remaining <= 0) { reject(new Error('GitHub API timeout or redirect limit')); return; }
+        let parsed;
+        try { parsed = new URL(url); } catch (error) { reject(error); return; }
+        if (parsed.protocol !== 'https:') { reject(new Error('Invalid update URL')); return; }
+        let timer;
+        const finish = callback => value => { clearTimeout(timer); callback(value); };
+        resolve = finish(resolve);
+        reject = finish(reject);
+        const request = https.get(parsed, {
+            headers: { Accept: 'application/vnd.github+json', 'User-Agent': USER_AGENT },
+            timeout: remaining
         }, response => {
-            if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-                requestJson(response.headers.location, timeoutMs).then(resolve, reject);
+            if ([301, 302, 303, 307, 308].includes(response.statusCode) && response.headers.location) {
+                response.resume();
+                requestJson(new URL(response.headers.location, parsed).href, timeoutMs, redirects + 1, deadline).then(resolve, reject);
                 return;
             }
             if (response.statusCode !== 200) {
                 response.resume();
-                reject(new Error(`GitHub API status ${response.statusCode}`));
+                reject(new Error('GitHub API status ' + response.statusCode));
                 return;
             }
-            let raw = '';
-            response.setEncoding('utf8');
-            response.on('data', chunk => { raw += chunk; });
+            let size = 0;
+            const chunks = [];
+            response.on('data', chunk => {
+                size += chunk.length;
+                if (size > 1024 * 1024) { request.destroy(new Error('GitHub response too large')); return; }
+                chunks.push(chunk);
+            });
+            response.on('error', reject);
+            response.on('aborted', () => reject(new Error('GitHub response aborted')));
             response.on('end', () => {
-                try {
-                    resolve(JSON.parse(raw));
-                } catch (error) {
-                    reject(error);
-                }
+                try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch (error) { reject(error); }
             });
         });
-        request.on('timeout', () => {
-            request.destroy(new Error('GitHub API timeout'));
-        });
+        timer = setTimeout(() => request.destroy(new Error('GitHub API timeout')), remaining);
+        request.on('timeout', () => request.destroy(new Error('GitHub API timeout')));
         request.on('error', reject);
     });
 }

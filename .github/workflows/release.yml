@@ -1,0 +1,62 @@
+name: Draft release
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: draft-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: plugin/package-lock.json
+      - name: Prepare draft
+        id: draft
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { prepare } = require('./plugin/scripts/github-release');
+            await prepare({ github, context, core });
+      - name: Build full release
+        run: npm run release -- --keep-version
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YandexMusic.Ajazz.Plugin.v${{ steps.draft.outputs.version }}
+          path: |
+            release/YandexMusic.Ajazz.Plugin.v${{ steps.draft.outputs.version }}.zip
+            release/com.whxtelxs.streamdock.yandexmusic.sdPlugin/build-info.json
+          if-no-files-found: error
+      - name: Attach files and tag
+        if: steps.draft.outputs.release_id != ''
+        uses: actions/github-script@v7
+        env:
+          RELEASE_ID: ${{ steps.draft.outputs.release_id }}
+          RELEASE_VERSION: ${{ steps.draft.outputs.version }}
+        with:
+          script: |
+            const { complete } = require('./plugin/scripts/github-release');
+            await complete({ github, context, core });
+      - name: Mark failed draft
+        if: failure() && steps.draft.outputs.release_id != ''
+        uses: actions/github-script@v7
+        env:
+          RELEASE_ID: ${{ steps.draft.outputs.release_id }}
+          RELEASE_VERSION: ${{ steps.draft.outputs.version }}
+        with:
+          script: |
+            const { fail } = require('./plugin/scripts/github-release');
+            await fail({ github, context, core });

@@ -1,6 +1,6 @@
 'use strict';
 
-const { log } = require('../utils/plugin');
+const { log } = require('../lib/logger');
 const { deps } = require('./deps');
 const { getSettingsSnapshot } = require('./settings');
 

@@ -22,7 +22,9 @@ function writeState(patch) {
         updatedAt: new Date().toISOString()
     };
     fs.mkdirSync(STATE_DIR, { recursive: true });
-    fs.writeFileSync(STATE_FILE, JSON.stringify(next, null, 2), 'utf8');
+    const temporary = STATE_FILE + '.' + process.pid + '.tmp';
+    fs.writeFileSync(temporary, JSON.stringify(next, null, 2), 'utf8');
+    fs.renameSync(temporary, STATE_FILE);
     return next;
 }
 

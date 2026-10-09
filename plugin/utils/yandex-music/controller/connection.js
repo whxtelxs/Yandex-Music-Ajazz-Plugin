@@ -1,178 +1,173 @@
 'use strict';
 
 const CDP = require('chrome-remote-interface');
-const { log } = require('../../plugin');
+const { log } = require('../../../lib/logger');
+const { withTimeout } = require('../../../lib/async-utils');
+
+const { isMusicTarget } = require('../../../lib/music-target');
 
 module.exports = {
-  async setPort(newPort) {
-    if (newPort === this.port) {
-      log.info(`Порт не изменился (${newPort})`);
-      return !!(await this.getClient());
-    }
-
-    log.info(`Изменение порта с ${this.port} на ${newPort}`);
-
-    await this.disconnect({ reconnect: false });
-    this.port = newPort;
-    this.reconnectAttempts = 0;
-
-    try {
-      await this.connect();
-      log.info(`Успешное подключение к новому порту ${newPort}`);
-      return true;
-    } catch (err) {
-      log.error(`Ошибка при подключении к новому порту ${newPort}:`, err);
-      return false;
-    }
-  },
-
-  async connect() {
-    if (this.client && this.connected) return this.client;
-    if (this.connectionPromise) {
-      return this.connectionPromise;
-    }
-
-    const generation = ++this._clientGeneration;
-    this._manualDisconnect = false;
-    this.connectionPromise = (async () => {
-      try {
-        log.info('Создание нового CDP соединения на порту', this.port);
-        const targets = await CDP.List({ port: this.port });
-        const pages = targets.filter(target => target.type === 'page');
-        const target = pages.find(item => /(^|\/\/)(music\.)?yandex\./i.test(item.url || ''))
-          || pages.find(item => /yandex.*music|music.*yandex/i.test(`${item.title || ''} ${item.url || ''}`))
-          || pages[0];
-        if (!target) throw new Error('Не найден page target Яндекс Музыки');
-
-        const client = await CDP({ port: this.port, target: target.id });
-        if (generation !== this._clientGeneration) {
-          await client.close();
-          throw new Error('Устаревшая попытка CDP подключения отменена');
+    async setPort(newPort) {
+        const port = Number(newPort);
+        if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Некорректный CDP порт');
+        if (port !== this.port) {
+            await this.disconnect({ reconnect: false });
+            this.port = port;
+            this.reconnectAttempts = 0;
         }
-        this.client = client;
-
-        await Promise.all([
-          client.Page.enable(),
-          client.Runtime.enable()
-        ]);
-
-        await this._setupStateObserver(client);
-
-        this.connected = true;
-        this.reconnectAttempts = 0;
-        this.onConnectionChange?.(true);
-
-        client.on('disconnect', () => {
-          if (generation !== this._clientGeneration || this._manualDisconnect) return;
-          log.error('CDP соединение разорвано, попытка переподключения');
-          this.connected = false;
-          this.onConnectionChange?.(false);
-          this.client = null;
-          this.connectionPromise = null;
-          this._observerSetup = false;
-          this.remoteState = null;
-          this.vibeShuffleState = null;
-          this.vibeRepeatMode = null;
-          this.reconnect();
-        });
-
-        log.info('CDP соединение успешно установлено');
-        if (typeof this.onConnected === 'function') {
-          Promise.resolve(this.onConnected()).catch(err => log.error('Ошибка полной синхронизации:', err));
+        this._manualDisconnect = false;
+        try {
+            return !!(await this.connect());
+        } catch {
+            this.requestReconnect();
+            return false;
         }
-        return client;
-      } catch (err) {
-        if (generation === this._clientGeneration) {
-          this.connected = false;
-          this.client = null;
-          this.onConnectionChange?.(false);
+    },
+
+    async connect() {
+        if (this.client && this.connected) return this.client;
+        if (this.connectionPromise) return this.connectionPromise;
+        const generation = ++this._clientGeneration;
+        this._manualDisconnect = false;
+        let candidate = null;
+        const attempt = (async () => {
+            try {
+                const targets = await withTimeout(() => CDP.List({ host: '127.0.0.1', port: this.port }),
+                    4000, 'CDP discovery timed out');
+                if (generation !== this._clientGeneration) throw new Error('CDP connection cancelled');
+                const target = targets.find(isMusicTarget);
+                if (!target) throw new Error('Не найден интерфейс Яндекс Музыки на выбранном порту');
+                const opening = CDP({ host: '127.0.0.1', port: this.port, target: target.id, local: true });
+                opening.then(client => {
+                    if (generation !== this._clientGeneration) client.close().catch(() => {});
+                }, () => {});
+                candidate = await withTimeout(opening, 4000, 'CDP connection timed out');
+                if (generation !== this._clientGeneration) throw new Error('CDP connection cancelled');
+                this.client = candidate;
+                await withTimeout(async () => {
+                    await Promise.all([candidate.Page.enable(), candidate.Runtime.enable()]);
+                    await this._setupStateObserver(candidate);
+                }, 5000, 'CDP initialization timed out');
+                if (generation !== this._clientGeneration) throw new Error('CDP connection cancelled');
+                candidate.on('disconnect', () => {
+                    if (generation !== this._clientGeneration || this._manualDisconnect) return;
+                    this._clientGeneration++;
+                    this.connected = false;
+                    this.playerReady = false;
+                    this.client = null;
+                    this._observerSetup = false;
+                    this.remoteState = null;
+                    this._domQueue.clear(new Error('CDP disconnected'));
+                    this.onConnectionChange?.(false);
+                    this.requestReconnect();
+                });
+                this.connected = true;
+                this.lastConnectionError = null;
+                this.reconnectAttempts = 0;
+                clearTimeout(this._reconnectTimer);
+                this._reconnectTimer = null;
+                this.onConnectionChange?.(true);
+                Promise.resolve(this.onConnected?.()).catch(error => log.error('Ошибка синхронизации:', error));
+                return candidate;
+            } catch (error) {
+                if (candidate) await withTimeout(() => candidate.close(), 500, 'CDP close timed out').catch(() => {});
+                if (generation === this._clientGeneration) {
+                    this._clientGeneration++;
+                    this.connected = false;
+                    this.playerReady = false;
+                    this.client = null;
+                    this.remoteState = null;
+                    this._observerSetup = false;
+                    this.lastConnectionError = error.message;
+                    this.onConnectionChange?.(false);
+                }
+                log.debug('CDP connection:', error.message);
+                throw error;
+            }
+        })();
+        this.connectionPromise = attempt;
+        try {
+            return await attempt;
+        } finally {
+            if (this.connectionPromise === attempt) this.connectionPromise = null;
         }
+    },
 
-        if (err.message.includes('connect ECONNREFUSED')) {
-          log.error('Не удалось подключиться к приложению Яндекс Музыка на порту', this.port);
-          log.error('Убедитесь, что приложение запущено с параметром --remote-debugging-port=' + this.port);
-        } else {
-          log.error('Ошибка при создании CDP-клиента:', err);
-        }
-
-        throw err;
-      } finally {
-        if (generation === this._clientGeneration) this.connectionPromise = null;
-      }
-    })();
-
-    return this.connectionPromise;
-  },
-
-  requestReconnect() {
-    this._manualDisconnect = false;
-    this.reconnect();
-  },
-
-  async reconnect() {
-    if (this._manualDisconnect || this._reconnectTimer || this.connected) return;
-    this.reconnectAttempts++;
-    const delay = Math.min(30000, this.reconnectDelay * (2 ** Math.min(this.reconnectAttempts - 1, 5)));
-    log.info(`Попытка переподключения ${this.reconnectAttempts}, задержка ${delay} мс`);
-    this._reconnectTimer = setTimeout(async () => {
-      this._reconnectTimer = null;
-      try {
-        await this.connect();
-        log.info('Переподключение успешно выполнено');
-      } catch (err) {
-        log.error('Ошибка при переподключении:', err);
+    requestReconnect() {
+        this._manualDisconnect = false;
         this.reconnect();
-      }
-    }, delay);
-  },
+    },
 
-  async getClient() {
-    try {
-      return await this.connect();
-    } catch (err) {
-      log.error('Не удалось получить CDP клиент:', err);
-      return null;
-    }
-  },
+    reconnect() {
+        if (this._manualDisconnect || this._reconnectTimer || this.connected) return;
+        const delay = Math.min(30000, this.reconnectDelay * 2 ** Math.min(this.reconnectAttempts++, 5));
+        this._reconnectTimer = setTimeout(async () => {
+            this._reconnectTimer = null;
+            try { await this.connect(); } catch { this.reconnect(); }
+        }, delay);
+    },
 
-  async checkConnection() {
-    try {
-      const client = await this.getClient();
-      return !!client;
-    } catch (err) {
-      log.error('Ошибка при проверке соединения с Яндекс Музыкой:', err);
-      return false;
-    }
-  },
+    async getClient() {
+        try { return await this.connect(); } catch { this.reconnect(); return null; }
+    },
 
-  shouldPreserveUiOnDisconnect() {
-    return !!this._manualDisconnect || !!this.isWarmingUp?.();
-  },
+    async checkConnection() {
+        try {
+            const value = await this._evaluateDom('return !!(ymFindSonataPlayerBar() || ymFindVibePlayerBar());',
+                { priority: 'sync', key: 'check-connection' });
+            this.playerReady = value === true;
+            return this.connected && this.playerReady;
+        } catch {
+            this.playerReady = false;
+            return false;
+        }
+    },
 
-  async disconnect({ reconnect = false } = {}) {
-    this._manualDisconnect = !reconnect;
-    this._clientGeneration++;
-    if (this._reconnectTimer) {
-      clearTimeout(this._reconnectTimer);
-      this._reconnectTimer = null;
-    }
-    this._domQueue.clear(new Error('CDP connection changed'));
-    const client = this.client;
-    this.client = null;
-    this.connected = false;
-    this.onConnectionChange?.(false);
-    this.connectionPromise = null;
-    this._observerSetup = false;
-    this.remoteState = null;
-    this.vibeShuffleState = null;
-    this.vibeRepeatMode = null;
-    if (client) {
-      try {
-        await client.close();
-        log.info('CDP соединение закрыто');
-      } catch (err) {
-        log.error('Ошибка при закрытии CDP соединения:', err);
-      }
-    }
-  }
+    getConnectionInfo() {
+        return {
+            connected: this.connected,
+            ready: !!this.playerReady,
+            stage: this.connected ? (this.playerReady ? 'ready' : 'loading') : 'disconnected',
+            port: this.port,
+            lastError: this.lastConnectionError || null,
+            remoteStateAgeMs: this.remoteStateUpdatedAt ? Date.now() - this.remoteStateUpdatedAt : null,
+            queueSize: this._domQueue.size,
+            reconnectAttempts: this.reconnectAttempts
+        };
+    },
+
+    shouldPreserveUiOnDisconnect() {
+        return !!this.isWarmingUp?.();
+    },
+
+    async disconnect({ reconnect = false } = {}) {
+        this._manualDisconnect = !reconnect;
+        this._clientGeneration++;
+        clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = null;
+        this._domQueue.clear(new Error('CDP connection changed'));
+        const client = this.client;
+        const scriptId = this._observerScriptId;
+        this.client = null;
+        this.connected = false;
+        this.playerReady = false;
+        this.connectionPromise = null;
+        this._observerSetup = false;
+        this._observerScriptId = null;
+        this.remoteState = null;
+        this.remoteStateUpdatedAt = 0;
+        this.vibeShuffleState = null;
+        this.vibeRepeatMode = null;
+        this.onConnectionChange?.(false);
+        if (client) {
+            await withTimeout(async () => {
+                await client.Runtime.evaluate({ expression: 'window.__YM_AJAZZ_OBSERVER__?.dispose?.()' }).catch(() => {});
+                if (scriptId) await client.Page.removeScriptToEvaluateOnNewDocument({ identifier: scriptId }).catch(() => {});
+            }, 500, 'Observer cleanup timed out').catch(() => {});
+            await withTimeout(() => client.close(), 500, 'CDP close timed out').catch(() => {});
+        }
+        if (reconnect) this.requestReconnect();
+    },
+
+    isMusicTarget
 };

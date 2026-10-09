@@ -1,6 +1,6 @@
 'use strict';
 
-const { log } = require('../../plugin');
+const { log } = require('../../../lib/logger');
 
 module.exports = {
   async likeTrack() {

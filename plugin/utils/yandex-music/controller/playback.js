@@ -1,18 +1,18 @@
 'use strict';
 
-const { log } = require('../../plugin');
+const { log } = require('../../../lib/logger');
 
 module.exports = {
-  async previousTrack() {
-    return await this.runTrackControl('previous', 'Переход к предыдущему треку');
+  async previousTrack(options = {}) {
+    return await this.runTrackControl('previous', 'Переход к предыдущему треку', options);
   },
 
-  async nextTrack() {
-    return await this.runTrackControl('next', 'Переход к следующему треку');
+  async nextTrack(options = {}) {
+    return await this.runTrackControl('next', 'Переход к следующему треку', options);
   },
 
-  async runTrackControl(direction, actionDescription) {
-    return this._runDomAction(`ymClickTrackControl('${direction}')`, actionDescription);
+  async runTrackControl(direction, actionDescription, options = {}) {
+    return this._runDomAction(`ymClickTrackControl('${direction}')`, actionDescription, options);
   },
 
   async togglePlayback() {
@@ -22,7 +22,7 @@ module.exports = {
       if (value && value.success) {
         log.info(value.message);
         log.info(`Трек был ${value.wasPlaying ? 'в состоянии воспроизведения' : 'на паузе'}`);
-        return { success: true, playing: !value.wasPlaying };
+        return { success: true, accepted: true, confirmed: value.confirmed === true, playing: typeof value.playing === 'boolean' ? value.playing : null };
       }
       log.error('Не удалось переключить воспроизведение:', value?.message);
       if (value?.error) log.error('Детали ошибки:', value.error);

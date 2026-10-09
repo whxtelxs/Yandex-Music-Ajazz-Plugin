@@ -25,8 +25,8 @@ function ymGetTrackTime() {
       if (timeOverlay) {
         var parsed = ymParseTimecodeOverlay(timeOverlay.textContent);
         if (parsed) {
-          var progressValue = slider ? parseFloat(slider.value) || 0 : 0;
-          var progressMax = slider ? parseFloat(slider.max) || 100 : 100;
+          var progressValue = slider ? Number(slider.value) : null;
+          var progressMax = slider ? Number(slider.max) : null;
           return {
             success: true,
             currentTime: parsed.currentTime,
@@ -94,6 +94,7 @@ function ymNormalizeMusicUrl(href, requireTrack) {
   if (raw.indexOf('yandex.') === -1) return '';
   try {
     var parsed = new URL(raw);
+    if (!/^music\\.yandex\\.(ru|com|by|kz|uz)$/.test(parsed.hostname)) return '';
     var base = parsed.origin;
     var albumId = parsed.searchParams.get('albumId');
     var trackId = parsed.searchParams.get('trackId');
@@ -161,11 +162,9 @@ function ymExtractCoverUrlFromNode(node) {
 
 function ymFindVibeCoverImage() {
   var candidates = [
-    ymQueryDeep('a[class*="AlbumCover_link"]'),
+    ymQueryDeep('[class*="VibePlayerBar_root"] a[class*="AlbumCover_link"]'),
     ymQueryDeep('[class*="VibePlayerBar_root"] [class*="AlbumCover_cover"]'),
     ymQueryDeep('[class*="VibePlayerBar_root"] [class*="AlbumCover_root"]'),
-    ymQueryDeep('[class*="AlbumCover_cover"]'),
-    ymQueryDeep('[class*="AlbumCover_root"]'),
     ymQueryDeep('[class*="VibePlayerBar_root"] img')
   ];
   for (var i = 0; i < candidates.length; i++) {
@@ -176,11 +175,9 @@ function ymFindVibeCoverImage() {
 
 function ymResolveVibeCoverUrl() {
   var candidates = [
-    ymQueryDeep('a[class*="AlbumCover_link"]'),
+    ymQueryDeep('[class*="VibePlayerBar_root"] a[class*="AlbumCover_link"]'),
     ymQueryDeep('[class*="VibePlayerBar_root"] [class*="AlbumCover_cover"]'),
     ymQueryDeep('[class*="VibePlayerBar_root"] [class*="AlbumCover_root"]'),
-    ymQueryDeep('[class*="AlbumCover_cover"]'),
-    ymQueryDeep('[class*="AlbumCover_root"]'),
     ymQueryDeep('[class*="VibePlayerBar_root"] img')
   ];
   for (var i = 0; i < candidates.length; i++) {
@@ -191,10 +188,10 @@ function ymResolveVibeCoverUrl() {
 }
 
 function ymFindVibeAlbumUrl(coverUrl) {
-  var vibeRoot = ymQueryDeep('[class*="VibePlayerBar_root"]') || ymQueryDeep('[class*="AlbumCover_root"]');
+  var vibeRoot = ymQueryDeep('[class*="VibePlayerBar_root"]');
   var scopes = [];
   if (vibeRoot) scopes.push(vibeRoot);
-  scopes.push(document);
+
   var selectors = [
     'a[class*="AlbumCover_link"]',
     'a[href*="albumId="]',
@@ -215,7 +212,9 @@ function ymFindVibeAlbumUrl(coverUrl) {
 }
 
 function ymFindMusicUrlDeep(requireTrack) {
-  var links = ymCollectDeepLinks(document);
+  var scope = ymIsVibePageActive() ? ymFindVibePlayerBar() : ymFindSonataPlayerBar();
+  if (!scope) return '';
+  var links = ymCollectDeepLinks(scope);
   var best = '';
   var bestScore = -1;
   for (var i = 0; i < links.length; i++) {
@@ -301,6 +300,24 @@ function ymUpscaleCoverUrl(url) {
 
 function ymGetTrackInfo() {
   try {
+    if (ymIsVibePageActive()) {
+      var title = ymGetVibeTrackTitle();
+      if (title) {
+        var artist = ymGetVibeTrackArtist();
+        var originalCoverUrl = ymResolveVibeCoverUrl();
+        var trackUrl = ymFindVibeAlbumUrl(originalCoverUrl);
+        return {
+          success: true,
+          title: title,
+          artist: artist,
+          coverUrl: ymUpscaleCoverUrl(originalCoverUrl),
+          originalCoverUrl: originalCoverUrl,
+          trackUrl: trackUrl
+        };
+      }
+    }
+
+
     var playerBar = ymFindSonataPlayerBar();
     var coverImgSonata = playerBar
       ? (playerBar.querySelector('img[class*="PlayerBarDesktopWithBackgroundProgressBar_cover"]')
@@ -321,10 +338,13 @@ function ymGetTrackInfo() {
         || playerBar.querySelector('[data-test-id="SEPARATED_ARTIST_TITLE"]'))
       : null;
     var titleSonata = titleElement ? (titleElement.textContent || '').trim() : '';
-    var artistSonata = artistElement ? (artistElement.textContent || '').trim() : '';
+    var artistLinks = playerBar ? playerBar.querySelectorAll('[class*="Meta_artists"] a, [data-test-id="SEPARATED_ARTIST_TITLE"] a') : [];
+    var artistNames = [];
+    for (var ai = 0; ai < artistLinks.length; ai++) artistNames.push(ymParseArtistLink(artistLinks[ai]));
+    var artistSonata = ymUniqueNonEmpty(artistNames).join(', ') || (artistElement ? (artistElement.textContent || '').trim() : '');
 
-    if (coverImgSonata && titleSonata) {
-      var originalCoverUrlSonata = coverImgSonata.currentSrc || coverImgSonata.src || '';
+    if (titleSonata) {
+      var originalCoverUrlSonata = coverImgSonata ? (coverImgSonata.currentSrc || coverImgSonata.src || '') : '';
       var trackUrlSonata = ymExtractMusicUrlFromNode(titleElement, true)
         || ymExtractMusicUrlFromNode(playerBar.querySelector('a[class*="Meta_albumLink"]'), true)
         || ymResolveTrackPageUrl(originalCoverUrlSonata);
@@ -336,23 +356,6 @@ function ymGetTrackInfo() {
         originalCoverUrl: originalCoverUrlSonata,
         trackUrl: trackUrlSonata
       };
-    }
-
-    if (ymIsVibePageActive()) {
-      var title = ymGetVibeTrackTitle();
-      if (title) {
-        var artist = ymGetVibeTrackArtist();
-        var originalCoverUrl = ymResolveVibeCoverUrl();
-        var trackUrl = ymFindVibeAlbumUrl(originalCoverUrl);
-        return {
-          success: true,
-          title: title,
-          artist: artist,
-          coverUrl: ymUpscaleCoverUrl(originalCoverUrl),
-          originalCoverUrl: originalCoverUrl,
-          trackUrl: trackUrl
-        };
-      }
     }
 
     if (!playerBar) return { success: false, message: 'Не найдена нижняя панель плеера' };
@@ -381,7 +384,12 @@ function ymSeekRelative(deltaSeconds) {
     if (!progressSlider) return { success: false, message: 'Прогресс-бар не найден' };
     var currentValue = parseFloat(progressSlider.value) || 0;
     var maxValue = parseFloat(progressSlider.max) || 100;
-    var newValue = Math.max(0, Math.min(maxValue, currentValue + deltaSeconds));
+    if (!ymCanClick(progressSlider)) return { success: false, message: 'Перемотка недоступна' };
+    var time = ymGetTrackTime();
+    var parts = String(time.totalTime || '').split(':');
+    var duration = parts.reduce(function(total, part) { return total * 60 + Number(part); }, 0);
+    if (!Number.isFinite(duration) || duration <= 0) return { success: false, message: 'Неизвестна длительность трека' };
+    var newValue = Math.max(0, Math.min(maxValue, currentValue + deltaSeconds * maxValue / duration));
     ymSetRangeValue(progressSlider, newValue);
     return {
       success: true,

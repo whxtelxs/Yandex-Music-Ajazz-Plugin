@@ -1,6 +1,6 @@
 'use strict';
 
-const { log } = require('../utils/plugin');
+const { log } = require('../lib/logger');
 const { deps } = require('./deps');
 const { applyActiveDebugPort } = require('./debug-port-sync');
 const { resyncAllStates, requestMediaRefresh } = require('./state-sync');
@@ -11,6 +11,7 @@ const CONNECT_RETRY_DELAY_MS = 1500;
 const CONNECT_RETRIES = 12;
 
 let ensureInFlight = null;
+let connectInFlight = null;
 
 function buildLaunchMessage(result) {
     if (result.adjusted) {
@@ -34,7 +35,13 @@ async function connectWithRetries() {
     return false;
 }
 
-async function runPostLaunchConnect(result, { source = 'launch' } = {}) {
+function runPostLaunchConnect(result, options = {}) {
+    if (connectInFlight) return connectInFlight;
+    connectInFlight = performPostLaunchConnect(result, options).finally(() => { connectInFlight = null; });
+    return connectInFlight;
+}
+
+async function performPostLaunchConnect(result, { source = 'launch' } = {}) {
     await applyActiveDebugPort(result.port, { source });
 
     const needsWarmup = !result.alreadyRunning;
@@ -42,8 +49,9 @@ async function runPostLaunchConnect(result, { source = 'launch' } = {}) {
         deps.yandexMusic.setWarmingUp(WARMUP_MS);
     }
 
-    await deps.yandexMusic.disconnect({ reconnect: false });
-    await new Promise(resolve => setTimeout(resolve, needsWarmup ? 1000 : 300));
+    if (!deps.yandexMusic.connected) {
+        await new Promise(resolve => setTimeout(resolve, needsWarmup ? 1000 : 300));
+    }
 
     const connected = await connectWithRetries();
     if (!connected) {
@@ -53,16 +61,17 @@ async function runPostLaunchConnect(result, { source = 'launch' } = {}) {
         return { connected: false, ready: false, cdpPending: true };
     }
 
-    let ready = true;
-    if (needsWarmup) {
+    let ready;
+    try {
         ready = await deps.yandexMusic.waitForPlayerReady({ timeoutMs: PLAYER_READY_TIMEOUT_MS });
+    } finally {
         deps.yandexMusic.clearWarmingUp();
     }
 
     if (ready) {
         await resyncAllStates();
         requestMediaRefresh(250);
-        deps.settingsServer?.broadcast({ type: 'connectionStatus', connected: true });
+        deps.settingsServer?.broadcast({ type: 'connectionStatus', ...deps.yandexMusic.getConnectionInfo() });
     } else {
         requestMediaRefresh(5000);
         log.warn(`[${source}] Плеер ещё загружается, синхронизация отложена`);
@@ -78,10 +87,10 @@ function startPostLaunchInBackground(result, { source = 'launch' } = {}) {
     });
 }
 
-async function ensureYandexMusicOnce() {
+async function ensureYandexMusicOnce(options) {
     if (ensureInFlight) return ensureInFlight;
 
-    ensureInFlight = deps.launcher.ensureYandexMusicRunning()
+    ensureInFlight = deps.launcher.ensureYandexMusicRunning(options)
         .finally(() => {
             ensureInFlight = null;
         });
@@ -89,18 +98,12 @@ async function ensureYandexMusicOnce() {
     return ensureInFlight;
 }
 
-async function launchYandexMusicApp({ source = 'unknown' } = {}) {
+async function launchYandexMusicApp({ source = 'unknown', restart = false } = {}) {
     try {
-        const result = await ensureYandexMusicOnce();
+        const result = await ensureYandexMusicOnce({ restart });
         if (!result.success) {
             log.error(`[${source}] Не удалось запустить Яндекс Музыку`);
             return { success: false, ...result };
-        }
-
-        try {
-            await applyActiveDebugPort(result.port, { source });
-        } catch (error) {
-            log.warn(`[${source}] Не удалось сразу синхронизировать порт:`, error.message);
         }
 
         startPostLaunchInBackground(result, { source });

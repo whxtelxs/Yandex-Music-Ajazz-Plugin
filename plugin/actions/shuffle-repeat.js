@@ -19,11 +19,6 @@ module.exports = function registerShuffleRepeatActions(plugin) {
         },
         async keyUp({ context }) {
             try {
-                const remote = deps.yandexMusic.getRemoteState();
-                if (remote?.shuffleAvailable === false) {
-                    plugin.showAlert(context);
-                    return;
-                }
                 const result = await deps.yandexMusic.toggleShuffle();
                 if (!result) {
                     plugin.showAlert(context);

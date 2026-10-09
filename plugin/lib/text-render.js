@@ -1,5 +1,7 @@
 'use strict';
 
+const { textWidth } = require('./text-layout');
+
 const CANVAS = 72;
 const CENTER_X = CANVAS / 2;
 
@@ -31,9 +33,11 @@ function buildSvg(textNodes) {
 }
 
 function textNode(line, x, y, fontSize) {
+    const width = textWidth(line, fontSize);
+    const fit = width > 64 ? ' textLength="64" lengthAdjust="spacingAndGlyphs"' : '';
     return `<text x="${x}" y="${y}" `
         + `font-family="Arial, Helvetica, sans-serif" font-weight="600" font-size="${fontSize}" `
-        + `fill="#ffffff" text-anchor="middle">${escapeXml(line)}</text>`;
+        + `fill="#ffffff" text-anchor="middle"${fit}>${escapeXml(line)}</text>`;
 }
 
 function renderTrackInfoImage(text, fontSize) {

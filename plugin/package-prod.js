@@ -3,11 +3,17 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const crypto = require('crypto');
+const { execFileSync } = require('child_process');
+const { checkProject, INSTALL_DIR } = require('./scripts/project-check');
+const { getProductionModulePaths } = require('./scripts/production-modules');
 
 const projectRoot = path.resolve(__dirname, '..');
-const pluginName = path.basename(projectRoot);
+const pluginName = INSTALL_DIR;
+checkProject(projectRoot);
 const releaseRoot = path.join(projectRoot, 'release');
-const stagingRoot = path.join(releaseRoot, pluginName);
+const finalRoot = path.join(releaseRoot, pluginName);
+const stagingRoot = path.join(releaseRoot, '.stage-' + process.pid);
 const manifest = JSON.parse(fs.readFileSync(path.join(projectRoot, 'manifest.json'), 'utf8'));
 const version = String(manifest.Version || '').trim();
 const packageLock = JSON.parse(fs.readFileSync(path.join(__dirname, 'package-lock.json'), 'utf8'));
@@ -16,11 +22,6 @@ const devModulePaths = new Set(
         .filter(([modulePath, metadata]) => modulePath.startsWith('node_modules/') && metadata.dev)
         .map(([modulePath]) => `plugin/${modulePath}`.replaceAll('\\', '/'))
 );
-const runtimeBinFiles = new Set([
-    'chrome-remote-interface',
-    'chrome-remote-interface.cmd',
-    'chrome-remote-interface.ps1'
-]);
 
 if (!/^\d+\.\d+\.\d+$/.test(version)) {
     throw new Error(`Некорректная версия в manifest.json: "${version}"`);
@@ -28,27 +29,33 @@ if (!/^\d+\.\d+\.\d+$/.test(version)) {
 
 const zipPath = path.join(releaseRoot, `YandexMusic.Ajazz.Plugin.v${version}.zip`);
 
+const productionModulePaths = getProductionModulePaths(packageLock, __dirname);
+
 function normalize(relativePath) {
     return relativePath.split(path.sep).join('/');
 }
 
 function shouldExclude(relativePath) {
     const normalized = normalize(relativePath);
-    const parts = normalized.split('/');
-    const fileName = parts[parts.length - 1];
-
     if (!normalized) return false;
-    if (parts[0] === '.git' || fileName === '.gitignore') return true;
-    if (parts[0] === 'release') return true;
-    if (normalized === 'plugin/build' || normalized.startsWith('plugin/build/')) return true;
-    if (normalized === 'plugin/log' || normalized.startsWith('plugin/log/')) return true;
-    if (normalized === 'plugin/test' || normalized.startsWith('plugin/test/')) return true;
-    if (normalized === 'propertyInspector/tailwind.input.css') return true;
-    if (parts[0] === 'log' || parts[0] === 'ym-test-plugin') return true;
-    if (parts[0] === 'static' && /^git/i.test(fileName)) return true;
-    if (normalized.startsWith('plugin/node_modules/.bin/') && !runtimeBinFiles.has(fileName)) return true;
+    const parts = normalized.split('/');
+    const allowedRoot = new Set(['manifest.json', 'ru.json', 'readme.md', 'LICENSE', 'THIRD_PARTY_NOTICES.txt', 'static', 'propertyInspector', 'plugin']);
+    if (!allowedRoot.has(parts[0])) return true;
+    if (parts[0] === 'propertyInspector') return normalized === 'propertyInspector/tailwind.input.css' || normalized.startsWith('propertyInspector/dashboard/src') || normalized.endsWith('.map');
+    if (parts[0] !== 'plugin') return false;
+    const allowedPlugin = new Set(['index.js', 'config.js', 'package.json', 'actions', 'lib', 'utils', 'node_modules']);
+    if (parts[1] && !allowedPlugin.has(parts[1])) return true;
+    if (normalized.startsWith('plugin/node_modules/.')) return true;
     for (const modulePath of devModulePaths) {
-        if (normalized === modulePath || normalized.startsWith(`${modulePath}/`)) return true;
+        if (normalized === modulePath || normalized.startsWith(modulePath + '/')) return true;
+    }
+    if (normalized.startsWith('plugin/node_modules/')) {
+        const index = parts.lastIndexOf('node_modules');
+        if (!parts[index + 1]) return false;
+        const scoped = parts[index + 1].startsWith('@');
+        const modulePath = parts.slice(0, index + (scoped ? 3 : 2)).join('/');
+        if (scoped && !parts[index + 2]) return ![...productionModulePaths].some(name => name.startsWith(modulePath + '/'));
+        return !productionModulePaths.has(modulePath);
     }
     return false;
 }
@@ -178,20 +185,62 @@ function createZip(sourceDir, destinationZip) {
     return files.length;
 }
 
-fs.rmSync(releaseRoot, { recursive: true, force: true });
-copyProject(projectRoot, stagingRoot);
-removeEmptyDirectories(stagingRoot);
-const releaseReadme = path.join(stagingRoot, 'readme.md');
-if (fs.existsSync(releaseReadme)) {
-    const cleanedReadme = fs.readFileSync(releaseReadme, 'utf8')
-        .replace(/^!\[[^\]]*]\(static\/git[^)]*\)\s*$/gim, '');
-    fs.writeFileSync(releaseReadme, cleanedReadme);
+function verifyZip(file) {
+    const archive = fs.readFileSync(file);
+    let offset = 0;
+    let count = 0;
+    while (archive.readUInt32LE(offset) === 0x04034B50) {
+        const checksum = archive.readUInt32LE(offset + 14);
+        const compressedSize = archive.readUInt32LE(offset + 18);
+        const size = archive.readUInt32LE(offset + 22);
+        const nameLength = archive.readUInt16LE(offset + 26);
+        const extraLength = archive.readUInt16LE(offset + 28);
+        const name = archive.subarray(offset + 30, offset + 30 + nameLength).toString('utf8');
+        if (!name.startsWith(pluginName + '/') || name.includes('../')) throw new Error('Invalid ZIP path');
+        const dataStart = offset + 30 + nameLength + extraLength;
+        const data = zlib.inflateRawSync(archive.subarray(dataStart, dataStart + compressedSize));
+        if (data.length !== size || crc32(data) !== checksum) throw new Error('Invalid ZIP checksum: ' + name);
+        offset = dataStart + compressedSize;
+        count++;
+    }
+    if (!count || archive.readUInt32LE(offset) !== 0x02014B50) throw new Error('Invalid ZIP directory');
+    return count;
 }
 
-const fileCount = createZip(stagingRoot, zipPath);
-const zipSizeMb = (fs.statSync(zipPath).size / 1024 / 1024).toFixed(2);
-
-console.log(`Релиз v${version} готов:`);
-console.log(`  Папка: ${stagingRoot}`);
-console.log(`  Архив: ${zipPath}`);
-console.log(`  Файлов: ${fileCount}, ZIP: ${zipSizeMb} МБ`);
+fs.mkdirSync(releaseRoot, { recursive: true });
+const temporaryZip = zipPath + '.' + process.pid + '.tmp';
+const backupRoot = finalRoot + '.backup-' + process.pid;
+let previousMoved = false;
+let installed = false;
+try {
+    require('./scripts/patch-discord-rpc');
+    copyProject(projectRoot, stagingRoot);
+    removeEmptyDirectories(stagingRoot);
+    const files = collectFiles(stagingRoot);
+    const hashes = Object.fromEntries(files.map(file => [file.relativePath, crypto.createHash('sha256').update(fs.readFileSync(file.absolutePath)).digest('hex')]));
+    let commit = null;
+    let dirty = true;
+    try {
+        commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: projectRoot, encoding: 'utf8' }).trim();
+        dirty = !!execFileSync('git', ['status', '--porcelain'], { cwd: projectRoot, encoding: 'utf8' }).trim();
+    } catch {}
+    fs.writeFileSync(path.join(stagingRoot, 'build-info.json'), JSON.stringify({ version, commit, dirty, builtAt: new Date().toISOString(), node: process.version, hashes }, null, 2));
+    const fileCount = createZip(stagingRoot, temporaryZip);
+    if (verifyZip(temporaryZip) !== fileCount) throw new Error('ZIP file count mismatch');
+    if (fs.existsSync(finalRoot)) { fs.renameSync(finalRoot, backupRoot); previousMoved = true; }
+    fs.renameSync(stagingRoot, finalRoot);
+    installed = true;
+    fs.renameSync(temporaryZip, zipPath);
+    if (previousMoved) fs.rmSync(backupRoot, { recursive: true, force: true });
+    console.log('Релиз v' + version + ': ' + zipPath);
+    console.log('Проверено файлов: ' + fileCount);
+} catch (error) {
+    if (previousMoved) {
+        if (installed) fs.rmSync(finalRoot, { recursive: true, force: true });
+        fs.renameSync(backupRoot, finalRoot);
+    }
+    throw error;
+} finally {
+    fs.rmSync(stagingRoot, { recursive: true, force: true });
+    fs.rmSync(temporaryZip, { force: true });
+}

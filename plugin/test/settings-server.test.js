@@ -68,9 +68,31 @@ class FakePlugin {
     openUrl() {}
 }
 
-test('settings server falls back, authenticates and synchronizes WebSockets', async t => {
-    const blocker = http.createServer();
-    const occupiedPort = await listen(blocker);
+test('panel URLs use a plain address and preserve section selection', async () => {
+    const opened = [];
+    const server = new SettingsServer({ plugin: { openUrl: url => opened.push(url) }, yandexMusic: {}, rootDir: '' });
+    assert.equal(server.getInfo().url, null);
+    assert.equal(await server.open(), false);
+    server.port = 17890;
+    assert.equal(await server.open(), true);
+    assert.equal(await server.open('debug'), true);
+    assert.deepEqual(opened, ['http://127.0.0.1:17890/', 'http://127.0.0.1:17890/?panel=debug']);
+});
+
+test('settings server falls back and synchronizes WebSockets without authentication', async t => {
+    let blocker;
+    let occupiedPort;
+    for (let port = 19000; port < 19100; port++) {
+        const candidate = http.createServer();
+        try {
+            occupiedPort = await listen(candidate, port);
+            blocker = candidate;
+            break;
+        } catch (error) {
+            if (!['EADDRINUSE', 'EACCES'].includes(error.code)) throw error;
+        }
+    }
+    assert.ok(blocker, 'No available port for the settings server test');
     t.after(() => close(blocker));
 
     const plugin = new FakePlugin();
@@ -92,19 +114,19 @@ test('settings server falls back, authenticates and synchronizes WebSockets', as
         yandexMusic,
         rootDir: path.resolve(__dirname, '..', '..', 'propertyInspector'),
         preferredPort: occupiedPort,
-        maxPortAttempts: 3,
-        token: 'test-session-token'
+        maxPortAttempts: Math.min(100, 65536 - occupiedPort)
     });
     await server.start();
     t.after(() => server.stop());
 
-    assert.equal(server.port, occupiedPort + 1);
-    assert.equal(await request(server.port, '/'), 401);
-    assert.equal(await request(server.port, '/?token=test-session-token'), 200);
-    assert.equal(await request(server.port, '/..%2Fplugin%2Findex.js?token=test-session-token'), 404);
+    assert.ok(server.port > occupiedPort && server.port < occupiedPort + 100);
+    assert.equal(server.getInfo().url, 'http://127.0.0.1:' + server.port + '/');
+    assert.equal(server.server.address().address, '127.0.0.1');
+    assert.equal(await request(server.port, '/'), 200);
+    assert.equal(await request(server.port, '/..%2Fplugin%2Findex.js'), 404);
     assert.equal(isAllowedOrigin('https://evil.example'), false);
 
-    const wsUrl = `ws://127.0.0.1:${server.port}/ws?token=test-session-token`;
+    const wsUrl = `ws://127.0.0.1:${server.port}/ws`;
     const rejectedStatus = await new Promise(resolve => {
         const rejected = new WebSocket(wsUrl, { origin: 'https://evil.example' });
         rejected.once('unexpected-response', (_request, response) => {
@@ -113,7 +135,7 @@ test('settings server falls back, authenticates and synchronizes WebSockets', as
         });
         rejected.once('error', () => {});
     });
-    assert.equal(rejectedStatus, 401);
+    assert.equal(rejectedStatus, 403);
 
     const first = await connect(wsUrl);
     const second = await connect(wsUrl);
@@ -137,4 +159,22 @@ test('settings server falls back, authenticates and synchronizes WebSockets', as
     const shutdown = waitForMessage(first, message => message.type === 'shutdown');
     await server.stop();
     assert.equal((await shutdown).type, 'shutdown');
+});
+
+
+test('stale settings patches preserve unrelated fields and reject field conflicts', async () => {
+    FakePlugin.globalSettings = { volumeStep: 5, trackInfoFontSize: 14 };
+    const plugin = new FakePlugin();
+    const music = { connected: false };
+    initDeps(plugin, music);
+    const server = new SettingsServer({ plugin, yandexMusic: music, rootDir: path.resolve(__dirname, '../../propertyInspector') });
+    server._snapshotSettings();
+    const revision = server.revision;
+    assert.equal((await server._saveSettings({ revision, settings: { volumeStep: 17 } })).ok, true);
+    assert.equal((await server._saveSettings({ revision, settings: { trackInfoFontSize: 20 } })).ok, true);
+    assert.equal(FakePlugin.globalSettings.volumeStep, 17);
+    const conflict = await server._saveSettings({ revision, settings: { volumeStep: 8 } });
+    assert.equal(conflict.ok, false);
+    assert.equal(conflict.conflict, true);
+    assert.equal(FakePlugin.globalSettings.volumeStep, 17);
 });

@@ -32,8 +32,8 @@ function getTimeFontSize(context) {
 
 function setDisplayImage(context, image) {
     if (!image || lastImageByContext.get(context) === image) return;
-    lastImageByContext.set(context, image);
     deps.plugin.setImage(context, image);
+    lastImageByContext.set(context, image);
 }
 
 function setTrackInfoDisplay(context, text) {
@@ -58,6 +58,7 @@ module.exports = {
     getTimeFontSize,
     setTrackInfoDisplay,
     setTimeDisplay,
+    setCoverDisplay: setDisplayImage,
     clearDisplayCache,
     clearAllDisplayCaches
 };

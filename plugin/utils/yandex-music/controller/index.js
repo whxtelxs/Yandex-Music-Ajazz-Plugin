@@ -18,6 +18,8 @@ class YandexMusicController {
   constructor() {
     this.port = 9222;
     this.connected = false;
+    this.playerReady = false;
+    this.lastConnectionError = null;
     this.client = null;
     this.connectionPromise = null;
     this.reconnectAttempts = 0;

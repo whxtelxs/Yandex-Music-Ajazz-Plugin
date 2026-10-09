@@ -1,10 +1,10 @@
 @import "../plugin/node_modules/tailwindcss/index.css";
 
 @theme {
-    /* 1 */ --color-bg: #101010;
-    /* 2 */ --color-surface: #151515;
-    /* 3 */ --color-surface-2: #1b1b1b;
-    /* 4 */ --color-surface-3: #202020;
+     --color-bg: #101010;
+     --color-surface: #151515;
+     --color-surface-2: #1b1b1b;
+     --color-surface-3: #202020;
     --color-accent: #ffff00;
     --color-accent-hover: #e6e600;
     --color-text-muted: #8a8a8a;
@@ -51,7 +51,7 @@
         @apply font-mono text-[#6f6f6f];
     }
 
-    /* Property Inspector launcher */
+    
     .pi-body {
         @apply flex min-h-screen items-center justify-center p-4;
         background-color: var(--color-bg);
@@ -92,7 +92,7 @@
         color: var(--color-text-soft);
     }
 
-    /* Legacy PI */
+    
     .pi-shell {
         @apply mx-auto flex w-full max-w-md flex-col gap-4 p-4;
     }
@@ -198,7 +198,7 @@
         @apply text-sm font-medium text-white;
     }
 
-    /* Dashboard shell */
+    
     .app-body {
         @apply box-border flex h-dvh max-h-dvh flex-col overflow-hidden p-4 sm:p-6;
         min-height: unset;
@@ -282,11 +282,11 @@
     }
 
     .content-area {
-        @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
+        @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto;
     }
 
     .view-panel {
-        @apply flex min-h-0 flex-1 flex-col gap-4 overflow-hidden;
+        @apply flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto;
     }
 
     .view-panel.is-hidden {
@@ -750,4 +750,36 @@
         transition-duration: 0.01ms !important;
         animation-duration: 0.01ms !important;
     }
+}
+
+@layer components {
+    .np-link-row { display: flex; gap: 8px; }
+    .np-link-row .field-input { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+    .np-link-row .btn-accent { flex-shrink: 0; }
+    .np-preview-card { flex-shrink: 0; }
+    .np-preview-stage {
+        overflow: hidden; border-radius: 14px; background-color: #181818;
+        background-image: linear-gradient(45deg, #202020 25%, transparent 25%), linear-gradient(-45deg, #202020 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #202020 75%), linear-gradient(-45deg, transparent 75%, #202020 75%);
+        background-size: 24px 24px; background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+    }
+    .np-preview-frame { display: block; border: 0; width: 100%; height: 280px; }
+    .np-presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .np-preset { cursor: pointer; border: 1px solid transparent; border-radius: 12px; padding: 10px 12px; background: var(--color-surface-2); color: var(--color-text-soft); text-align: left; font-size: 12px; }
+    .np-preset:hover { color: white; background: var(--color-surface-3); }
+    .np-preset-active { color: white; border-color: #555; background: var(--color-surface-3); }
+    .np-controls { display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; }
+    .np-control-group { border-radius: 20px; background: var(--color-surface); overflow: hidden; flex-shrink: 0; }
+    .np-control-group > summary { cursor: pointer; padding: 18px 20px; font-size: 14px; font-weight: 500; }
+    .np-control-rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; padding: 0 20px 20px; }
+    .np-control-row { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--color-text-soft); }
+    .np-control-row select { font: inherit; width: 55%; padding: 0 8px; }
+    .np-control-range { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+    .np-control-range .range-input { grid-column: 1 / -1; }
+    .np-checkbox { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--color-accent); }
+    .np-color { width: 42px; height: 30px; flex-shrink: 0; border: none; border-radius: 8px; background: none; cursor: pointer; padding: 0; }
+    @media (max-width: 850px) { .np-control-rows { grid-template-columns: minmax(0, 1fr); } }
+}
+
+@layer components {
+  #panel-nowplaying > * { flex-shrink: 0; }
 }

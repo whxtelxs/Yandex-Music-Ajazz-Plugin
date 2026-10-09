@@ -1,0 +1,8 @@
+{
+  "name": "yandex-music-ajazz-workspace",
+  "private": true,
+  "scripts": {
+    "release": "npm --prefix plugin run release --",
+    "dev": "npm --prefix plugin run dev --"
+  }
+}

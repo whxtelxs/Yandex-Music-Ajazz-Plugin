@@ -1,22 +1,24 @@
-/// <reference path="../utils/action.js" />
+'use strict';
 
 const $local = true;
 const $back = false;
 
 let initialized = false;
-let panelAvailable = false;
+let panelUrl = null;
 
 function applyPanelInfo(info) {
-    panelAvailable = !!info?.available;
+    panelUrl = info?.available ? info.url || null : null;
     const button = document.getElementById('openSettingsBtn');
-    if (button) button.disabled = !panelAvailable;
-    if (!panelAvailable) {
+    if (button) button.disabled = !panelUrl;
+    if (!panelUrl) {
         setTimeout(() => {
-            if ($websocket?.readyState === WebSocket.OPEN) {
-                $websocket.sendToPlugin({ command: 'getSettingsPanelInfo' });
-            }
+            if ($websocket?.readyState === WebSocket.OPEN) $websocket.sendToPlugin({ command: 'getSettingsPanelInfo' });
         }, 1000);
     }
+}
+
+function openSettings() {
+    if (panelUrl) $websocket.openUrl(panelUrl);
 }
 
 function initUI() {
@@ -27,11 +29,7 @@ function initUI() {
     }
     initialized = true;
     $websocket.sendToPlugin({ command: 'getSettingsPanelInfo' });
-
-    document.getElementById('openSettingsBtn')?.addEventListener('click', () => {
-        if (!panelAvailable) return;
-        $websocket.sendToPlugin({ command: 'openSettingsPanel' });
-    });
+    document.getElementById('openSettingsBtn')?.addEventListener('click', openSettings);
 }
 
 const $propEvent = {

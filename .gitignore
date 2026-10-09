@@ -1,4 +1,7 @@
+plugin/node_modules/
 plugin/log/
-log/*
+log/
 ym-test-plugin/
 release/
+*.tmp
+.dev-panel/

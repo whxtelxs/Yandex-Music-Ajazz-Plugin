@@ -4,9 +4,10 @@ module.exports = `
 function ymFindVibeLikeButton() {
   var bar = ymFindVibePlayerBar();
   if (!bar) return null;
-  return bar.querySelector('button[aria-label="Нравится"]')
+  return bar.querySelector('button[data-test-id="LIKE_BUTTON"]')
+    || bar.querySelector('button[aria-label="Нравится"]')
     || (function() {
-      var icon = bar.querySelector('use[href*="liked_xs"], use[xlink\\:href*="liked_xs"], use[href*="like_xs"], use[xlink\\:href*="like_xs"]');
+      var icon = bar.querySelector('use[href*="liked_xs"], use[*|href*="liked_xs"], use[href*="like_xs"], use[*|href*="like_xs"]');
       return icon ? icon.closest('button') : null;
     })();
 }
@@ -14,9 +15,10 @@ function ymFindVibeLikeButton() {
 function ymFindVibeDislikeButton() {
   var bar = ymFindVibePlayerBar();
   if (!bar) return null;
-  return bar.querySelector('button[aria-label="Не нравится"]')
+  return bar.querySelector('button[data-test-id="DISLIKE_BUTTON"]')
+    || bar.querySelector('button[aria-label="Не нравится"]')
     || (function() {
-      var icon = bar.querySelector('use[href*="dislike_xs"], use[xlink\\:href*="dislike_xs"]');
+      var icon = bar.querySelector('use[href*="dislike_xs"], use[*|href*="dislike_xs"]');
       return icon ? icon.closest('button') : null;
     })();
 }
@@ -26,8 +28,6 @@ function ymFindSonataLikeButton() {
   if (!playerBar) return null;
   var likeButton = playerBar.querySelector("[data-test-id='LIKE_BUTTON']");
   if (likeButton) return likeButton;
-  var sonataSection = playerBar.querySelector('.PlayerBarDesktopWithBackgroundProgressBar_sonata__mGFb_');
-  if (sonataSection) return sonataSection.querySelector('button:last-of-type');
   return null;
 }
 
@@ -36,8 +36,6 @@ function ymFindSonataDislikeButton() {
   if (!playerBar) return null;
   var dislikeButton = playerBar.querySelector("[data-test-id='DISLIKE_BUTTON']");
   if (dislikeButton) return dislikeButton;
-  var sonataSection = playerBar.querySelector('.PlayerBarDesktopWithBackgroundProgressBar_sonata__mGFb_');
-  if (sonataSection) return sonataSection.querySelector('button:first-of-type');
   return null;
 }
 
@@ -62,56 +60,23 @@ function ymDetectLikeIsLiked() {
   return null;
 }
 
-function ymClickLike() {
+async function ymClickLike() {
   try {
-    if (ymIsVibePageActive()) {
-      var vibeLike = ymFindVibeLikeButton();
-      if (vibeLike) {
-        var vibeWasLiked = ymIsButtonLiked(vibeLike);
-        vibeLike.click();
-        return { success: true, message: 'Vibe: лайк', liked: !vibeWasLiked };
-      }
-    }
-    var sonataLike = ymFindSonataLikeButton();
-    if (sonataLike) {
-      var sonataWasLiked = ymIsButtonLiked(sonataLike);
-      sonataLike.click();
-      return { success: true, message: 'Sonata: лайк', liked: !sonataWasLiked };
-    }
-    var vibeFallback = ymFindVibeLikeButton();
-    if (vibeFallback) {
-      var fallbackWasLiked = ymIsButtonLiked(vibeFallback);
-      vibeFallback.click();
-      return { success: true, message: 'Vibe: лайк', liked: !fallbackWasLiked };
-    }
-    return { success: false, message: 'Кнопка лайка не найдена' };
-  } catch (err) {
-    return { success: false, message: err.message, error: err.toString() };
+    var button = ymIsVibePageActive() ? ymFindVibeLikeButton() : ymFindSonataLikeButton();
+    if (!ymCanClick(button)) return { success: false, message: 'Лайк недоступен' };
+    var before = ymIsButtonLiked(button);
+    button.click();
+    var liked = await ymWaitForState(ymDetectLikeIsLiked, !before);
+    return { success: true, accepted: true, confirmed: liked !== null, liked: liked };
+  } catch (error) {
+    return { success: false, message: error.message };
   }
 }
 
 function ymClickDislike() {
-  try {
-    if (ymIsVibePageActive()) {
-      var vibeDislike = ymFindVibeDislikeButton();
-      if (vibeDislike) {
-        vibeDislike.click();
-        return { success: true, message: 'Vibe: дизлайк' };
-      }
-    }
-    var sonataDislike = ymFindSonataDislikeButton();
-    if (sonataDislike) {
-      sonataDislike.click();
-      return { success: true, message: 'Sonata: дизлайк' };
-    }
-    var vibeFallback = ymFindVibeDislikeButton();
-    if (vibeFallback) {
-      vibeFallback.click();
-      return { success: true, message: 'Vibe: дизлайк' };
-    }
-    return { success: false, message: 'Кнопка дизлайка не найдена' };
-  } catch (err) {
-    return { success: false, message: err.message, error: err.toString() };
-  }
+  var button = ymIsVibePageActive() ? ymFindVibeDislikeButton() : ymFindSonataDislikeButton();
+  if (!ymCanClick(button)) return { success: false, message: 'Дизлайк недоступен' };
+  button.click();
+  return { success: true, accepted: true, confirmed: false };
 }
 `;
