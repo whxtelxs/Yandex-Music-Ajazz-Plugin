@@ -25,7 +25,7 @@ module.exports = {
 
         while (Date.now() < deadline && !signal?.aborted) {
             const ready = await this._evaluateDom(
-                'return !!(ymFindSonataPlayerBar() || ymFindVibePlayerBar());',
+                'return ymIsMusicPlayerReady();',
                 { priority: 'background', key: 'player-ready', timeoutMs: Math.max(1, deadline - Date.now()), signal }
             );
             if (ready) {

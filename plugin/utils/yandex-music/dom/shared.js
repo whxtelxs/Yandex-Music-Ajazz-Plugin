@@ -7,15 +7,135 @@ function ymFindSonataPlayerBar() {
     || ymQueryDeep('[class*="PlayerBarDesktopWithBackgroundProgressBar_info"]');
 }
 
+// The separate My Vibe view may omit both the desktop bar and the usual Vibe controls.
+function ymIsVisibleNode(node) {
+  if (!node) return false;
+  if (node.closest && node.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
+  if (node.getClientRects && node.getClientRects().length === 0) return false;
+  return true;
+}
+
+function ymFindVibeMetadataRoot() {
+  var node = document.querySelector('[class*="VibePage_root"], [class*="VibePlayerbarMeta_root"], '
+    + '[class*="VibePage_entityMeta"], [class*="VibePlayerbarMeta_trackNameText"]');
+  return ymIsVisibleNode(node) ? node : null;
+}
+
+function ymReadMediaSessionTrack() {
+  try {
+    var metadata = typeof navigator !== 'undefined' && navigator.mediaSession
+      ? navigator.mediaSession.metadata : null;
+    if (!metadata) return null;
+    var title = String(metadata.title || '').trim();
+    if (!title || /^(моя волна|my vibe|яндекс музыка|yandex music)$/i.test(title)) return null;
+    var artwork = metadata.artwork || [];
+    var coverUrl = '';
+    var bestSize = -1;
+    for (var i = 0; i < artwork.length; i++) {
+      var item = artwork[i];
+      if (!item || !item.src) continue;
+      var raw = String(item.src);
+      if (raw.indexOf('//') === 0) raw = 'https:' + raw;
+      else if (raw.indexOf('/') === 0 && typeof location !== 'undefined') raw = location.origin + raw;
+      if (!/^https?:[/][/]/i.test(raw)) continue;
+      var dims = String(item.sizes || '').match(/([0-9]+) *x *([0-9]+)/i);
+      var size = dims ? Math.min(Number(dims[1]), Number(dims[2])) : 0;
+      if (size >= bestSize) { bestSize = size; coverUrl = raw; }
+    }
+    return { title: title, artist: String(metadata.artist || '').trim(), coverUrl: coverUrl };
+  } catch (err) { return null; }
+}
+
+
+// Read the position supplied to Chromium's media controls by the music app.
+// Web MediaSession has no public position getter; recording calls is non-invasive.
+function ymInstallMediaPositionCapture() {
+  try {
+    var session = typeof navigator !== 'undefined' ? navigator.mediaSession : null;
+    if (!session || typeof session.setPositionState !== 'function') return;
+    if (session.setPositionState.__ymAjazzPositionCapture) return;
+    var original = session.setPositionState;
+    var wrapped = function(positionState) {
+      try {
+        if (positionState && Number.isFinite(Number(positionState.duration)) && Number(positionState.duration) > 0) {
+          var meta = ymReadMediaSessionTrack();
+          var duration = Number(positionState.duration);
+          var position = Number(positionState.position);
+          window.__YM_AJAZZ_MEDIA_POSITION = {
+            duration: duration,
+            position: Number.isFinite(position) ? Math.max(0, Math.min(duration, position)) : 0,
+            at: Date.now(),
+            title: meta ? meta.title : '',
+            artist: meta ? meta.artist : ''
+          };
+        } else {
+          window.__YM_AJAZZ_MEDIA_POSITION = null;
+        }
+      } catch (ignored) {}
+      return original.apply(this, arguments);
+    };
+    wrapped.__ymAjazzPositionCapture = true;
+    session.setPositionState = wrapped;
+  } catch (ignored) {}
+}
+
+function ymReadMediaPosition() {
+  try {
+    var value = window.__YM_AJAZZ_MEDIA_POSITION;
+    if (!value || !Number.isFinite(value.duration) || value.duration <= 0) return null;
+    // Do not reuse media data belonging to an earlier track.
+    var media = ymReadMediaSessionTrack();
+    var title = ymIsVibePageActive() ? ymGetVibeTrackTitle() : '';
+    var normal = function(value) { return String(value || '').trim().toLocaleLowerCase().replace(/ +/g, ' '); };
+    if (value.title && media && normal(value.title) !== normal(media.title)) return null;
+    if (value.title && !media && title && normal(value.title) !== normal(title)) return null;
+    if (value.artist && media && normal(value.artist) !== normal(media.artist)) return null;
+    if (Date.now() - value.at > value.duration * 1000 + 30000) return null;
+    var playback = typeof navigator !== 'undefined' && navigator.mediaSession
+      ? navigator.mediaSession.playbackState : '';
+    var playing = playback === 'playing' ? true : playback === 'paused' ? false : ymDetectPlaybackIsPlaying();
+    var elapsed = playing === true ? Math.max(0, (Date.now() - value.at) / 1000) : 0;
+    var position = Math.min(value.duration, value.position + elapsed);
+    return {
+      success: true,
+      currentTime: ymFormatSeconds(position),
+      totalTime: ymFormatSeconds(value.duration),
+      progressValue: position, progressMax: value.duration,
+      progressPercent: 100 * position / value.duration
+    };
+  } catch (ignored) { return null; }
+}
+
+function ymFormatSeconds(seconds) {
+  var s = Math.max(0, Math.floor(seconds));
+  var minutes = Math.floor(s / 60);
+  var hours = Math.floor(minutes / 60);
+  return hours > 0
+    ? hours + ':' + String(minutes % 60).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0')
+    : minutes + ':' + String(s % 60).padStart(2, '0');
+}
+
+function ymIsMusicPlayerReady() {
+  return !!(ymFindSonataPlayerBar() || ymFindVibePlayerBar()
+    || (ymIsVibePageActive() && ymGetVibeTrackTitle()) || ymReadMediaSessionTrack());
+}
+
 function ymFindVibeControlsRoot() {
   return document.querySelector('[class*="VibePlayerControls_root"]');
 }
 
 function ymIsVibePageActive() {
   var vibeControls = ymFindVibeControlsRoot();
-  if (!vibeControls) return false;
-  var rect = vibeControls.getBoundingClientRect();
-  return rect.width > 0 && rect.height > 0;
+  if (vibeControls && ymIsVisibleNode(vibeControls)) {
+    var rect = vibeControls.getBoundingClientRect ? vibeControls.getBoundingClientRect() : null;
+    if (!rect || (rect.width > 0 && rect.height > 0)) return true;
+  }
+  // A separate My Vibe page may render metadata without the usual controls.
+  if (ymFindVibeMetadataRoot()) return true;
+  var vibePlayer = ymFindVibePlayerBar();
+  if (ymIsVisibleNode(vibePlayer)) return true;
+  var path = typeof location !== 'undefined' ? String(location.pathname || '') : '';
+  return /(^|[/])(vibe|my-vibe)([/]|$)/i.test(path);
 }
 
 function ymFindVibePlayerBar() {

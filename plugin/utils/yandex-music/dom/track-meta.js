@@ -2,8 +2,11 @@
 
 module.exports = `
 function ymGetVibeTrackTitle() {
-  var nodes = document.querySelectorAll('[class*="VibePlayerbarMeta_trackNameText"]');
+  var selector = '[class*="VibePlayerbarMeta_trackNameText"], [class*="VibePage_trackNameText"], '
+    + '[class*="VibePage_trackTitle"], [class*="VibePlayerbarMeta_title"]';
+  var nodes = document.querySelectorAll(selector);
   for (var i = 0; i < nodes.length; i++) {
+    if (!ymIsVisibleNode(nodes[i])) continue;
     var text = (nodes[i].textContent || '').trim();
     if (text) return text;
   }
@@ -55,6 +58,10 @@ function ymGetVibeTrackArtist() {
     if (fallbackName) names.push(fallbackName);
   }
 
+  if (!names.length) {
+    var fallback = document.querySelector('[class*="VibePlayerbarMeta_artist"], [class*="VibePage_artistName"]');
+    if (ymIsVisibleNode(fallback)) names.push((fallback.textContent || '').trim());
+  }
   return ymUniqueNonEmpty(names).join(', ');
 }
 `;

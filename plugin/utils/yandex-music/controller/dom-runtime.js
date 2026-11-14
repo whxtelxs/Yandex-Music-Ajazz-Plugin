@@ -77,6 +77,7 @@ module.exports = {
 
     const script = `
       ${YM_DOM_HELPERS}
+      ymInstallMediaPositionCapture();
       window.__YM_AJAZZ_HELPERS_READY__ = true;
       if (document.documentElement) {
         ymInstallAjazzObserver();

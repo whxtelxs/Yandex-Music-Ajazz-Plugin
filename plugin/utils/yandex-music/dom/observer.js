@@ -9,7 +9,7 @@ function ymCollectAjazzState() {
   var shuffle = vibe ? null : ymDetectSonataControlByFragment('shuffle');
   var repeat = vibe ? null : ymDetectSonataControlByFragment('repeat');
   var next = {
-    playerReady: !!(vibe ? ymFindVibePlayerBar() : ymFindSonataPlayerBar()),
+    playerReady: ymIsMusicPlayerReady(),
     vibeActive: vibe,
     shuffleAvailable: vibe ? ymDetectVibeShuffleAvailable() : true,
     shuffleOn: menu ? menu.shuffleOn : (shuffle && shuffle.ok ? shuffle.shuffle : null),
@@ -95,7 +95,9 @@ function ymInstallAjazzObserver() {
       observedMenu = menu;
       if (menu) menuObserver.observe(menu, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'aria-pressed', 'aria-disabled'] });
     }
-    var root = ymIsVibePageActive() ? ymFindVibePlayerBar() : ymFindSonataPlayerBar();
+    var root = ymIsVibePageActive()
+      ? (ymFindVibePlayerBar() || ymFindVibeMetadataRoot())
+      : ymFindSonataPlayerBar();
     if (root === observedRoot) return;
     observer.disconnect();
     observedRoot = root;
