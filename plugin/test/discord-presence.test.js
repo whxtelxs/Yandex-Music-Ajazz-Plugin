@@ -31,14 +31,14 @@ test('buildArtistState returns artist only', () => {
     assert.equal(buildArtistState('Неизвестный исполнитель'), '');
 });
 
-test('normalizeTrackUrl accepts yandex track and album links', () => {
+test('normalizeTrackUrl accepts track links and rejects album links', () => {
     assert.equal(
         normalizeTrackUrl('https://music.yandex.ru/album/37596605/track/141409337'),
         'https://music.yandex.ru/album/37596605/track/141409337'
     );
     assert.equal(
         normalizeTrackUrl('https://music.yandex.ru/album/37596605'),
-        'https://music.yandex.ru/album/37596605'
+        'https://music.yandex.ru/'
     );
     assert.equal(
         normalizeTrackUrl('/album/track?albumId=36326202&trackId=138448803'),
@@ -46,21 +46,21 @@ test('normalizeTrackUrl accepts yandex track and album links', () => {
     );
     assert.equal(
         normalizeTrackUrl('/album?albumId=36326202'),
-        'https://music.yandex.ru/album/36326202'
+        'https://music.yandex.ru/'
     );
     assert.equal(normalizeTrackUrl('https://example.com/track/1'), 'https://music.yandex.ru/');
     assert.equal(normalizeTrackUrl(''), 'https://music.yandex.ru/');
 });
 
-test('normalizeTrackUrl falls back to album id from cover url on vibe', () => {
+test('normalizeTrackUrl does not turn a cover into an album link', () => {
     const cover = 'https://avatars.yandex.net/get-music-content/20013662/c12d5e66.a.42511627-1/400x400';
     assert.equal(
         normalizeTrackUrl('', 'https://music.yandex.ru/', cover),
-        'https://music.yandex.ru/album/42511627'
+        'https://music.yandex.ru/'
     );
 });
 
-test('buildPresenceModel uses album url from cover when track url missing', () => {
+test('buildPresenceModel uses home url when track url is missing', () => {
     const cover = 'https://avatars.yandex.net/get-music-content/20013662/c12d5e66.a.42511627-1/400x400';
     const model = buildPresenceModel({
         title: 'рабочий класс (временно)',
@@ -69,8 +69,8 @@ test('buildPresenceModel uses album url from cover when track url missing', () =
         coverUrl: cover
     });
 
-    assert.equal(model.trackUrl, 'https://music.yandex.ru/album/42511627');
-    assert.equal(model.buttons[0].url, 'https://music.yandex.ru/album/42511627');
+    assert.equal(model.trackUrl, 'https://music.yandex.ru/');
+    assert.equal(model.buttons[0].url, 'https://music.yandex.ru/');
 });
 
 test('buildPresenceModel uses track url from snapshot', () => {

@@ -41,8 +41,8 @@ function buildArtistState(artist) {
     return '';
 }
 
-function normalizeTrackUrl(url, fallback = YANDEX_MUSIC_URL, coverUrl = '') {
-    return normalizeYandexMusicUrl(url, { requireTrack: false, fallback, coverUrl });
+function normalizeTrackUrl(url, fallback = YANDEX_MUSIC_URL) {
+    return normalizeYandexMusicUrl(url, { requireTrack: true, fallback });
 }
 
 function buildPresenceModel(snapshot) {
@@ -51,7 +51,7 @@ function buildPresenceModel(snapshot) {
     const artist = discordText(snapshot.artist) || 'Неизвестный исполнитель';
     const details = discordText(snapshot.title) || 'Неизвестный трек';
     const playing = !!snapshot.playing;
-    const trackUrl = normalizeTrackUrl(snapshot?.trackUrl, YANDEX_MUSIC_URL, snapshot?.coverUrl);
+    const trackUrl = normalizeTrackUrl(snapshot?.trackUrl);
 
     return {
         details,

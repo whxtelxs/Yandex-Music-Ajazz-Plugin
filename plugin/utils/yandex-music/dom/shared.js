@@ -7,7 +7,6 @@ function ymFindSonataPlayerBar() {
     || ymQueryDeep('[class*="PlayerBarDesktopWithBackgroundProgressBar_info"]');
 }
 
-// The separate My Vibe view may omit both the desktop bar and the usual Vibe controls.
 function ymIsVisibleNode(node) {
   if (!node) return false;
   if (node.closest && node.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
@@ -47,8 +46,6 @@ function ymReadMediaSessionTrack() {
 }
 
 
-// Read the position supplied to Chromium's media controls by the music app.
-// Web MediaSession has no public position getter; recording calls is non-invasive.
 function ymInstallMediaPositionCapture() {
   try {
     var session = typeof navigator !== 'undefined' ? navigator.mediaSession : null;
@@ -83,7 +80,6 @@ function ymReadMediaPosition() {
   try {
     var value = window.__YM_AJAZZ_MEDIA_POSITION;
     if (!value || !Number.isFinite(value.duration) || value.duration <= 0) return null;
-    // Do not reuse media data belonging to an earlier track.
     var media = ymReadMediaSessionTrack();
     var title = ymIsVibePageActive() ? ymGetVibeTrackTitle() : '';
     var normal = function(value) { return String(value || '').trim().toLocaleLowerCase().replace(/ +/g, ' '); };
@@ -130,7 +126,6 @@ function ymIsVibePageActive() {
     var rect = vibeControls.getBoundingClientRect ? vibeControls.getBoundingClientRect() : null;
     if (!rect || (rect.width > 0 && rect.height > 0)) return true;
   }
-  // A separate My Vibe page may render metadata without the usual controls.
   if (ymFindVibeMetadataRoot()) return true;
   var vibePlayer = ymFindVibePlayerBar();
   if (ymIsVisibleNode(vibePlayer)) return true;

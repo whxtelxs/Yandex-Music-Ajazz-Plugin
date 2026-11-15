@@ -1,6 +1,6 @@
 {
   "name": "yandex-music-ajazz-plugin",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "author": "whxtelxs",
   "main": "index.js",
   "description": "Yandex Music Controller for Ajazz AKP 153",

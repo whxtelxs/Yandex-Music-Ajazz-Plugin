@@ -2,7 +2,7 @@
 
 module.exports = `
 function ymGetVibeTrackTitle() {
-  var selector = '[class*="VibePlayerbarMeta_trackNameText"], [class*="VibePage_trackNameText"], '
+  var selector = '[class*="VibePlayerbarTrackName_trackNameText"]:not([aria-hidden="true"]), [class*="VibePlayerbarMeta_trackNameText"], [class*="VibePage_trackNameText"], '
     + '[class*="VibePage_trackTitle"], [class*="VibePlayerbarMeta_title"]';
   var nodes = document.querySelectorAll(selector);
   for (var i = 0; i < nodes.length; i++) {

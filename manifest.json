@@ -417,7 +417,7 @@
   "Description": "Плагин для управления Yandex Music через Ajazz.",
   "Category": "Yandex Music",
   "CategoryIcon": "static/App-logo.png",
-  "Version": "2.1.0",
+  "Version": "2.1.1",
   "URL": "https://lisik.dev",
   "OS": [
     {

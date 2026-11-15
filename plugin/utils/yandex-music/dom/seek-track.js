@@ -336,14 +336,12 @@ function ymGetVibeTrackUrlFromNodes() {
   var links = ymCollectDeepLinks(meta);
   var matching = [];
   for (var i = 0; i < links.length; i++) {
-    // Do not copy a link to an unrelated recommendation on the Vibe page.
     var url = ymNormalizeMusicUrl(links[i].getAttribute('href') || links[i].href || '', true);
     if (!url) continue;
     var label = ymNormalizeTrackName(links[i].getAttribute('aria-label') || links[i].textContent);
     if (label === title || label.indexOf(title + ' ') === 0) return url;
     matching.push(url);
   }
-  // A single link inside the track metadata (not the entire page) is unambiguous.
   var className = String(meta.className || '');
   if (matching.length === 1 && (/VibePage_entityMeta|VibePlayerbarMeta_root/.test(className))) {
     return matching[0];
@@ -351,56 +349,40 @@ function ymGetVibeTrackUrlFromNodes() {
   return '';
 }
 
-function ymFindVibeReactTrackUrl(title, artist) {
-  var root = ymFindVibeMetadataRoot();
-  if (!root || !title) return '';
-  var nodes = [root];
-  var titleNode = ymQueryDeep('[class*="VibePage_trackNameText"], [class*="VibePlayerbarMeta_trackNameText"]', root);
-  if (titleNode) nodes.unshift(titleNode);
-  var expected = ymNormalizeTrackName(title);
-  var expectedArtist = ymNormalizeTrackName(artist);
+function ymFindVibeReactTrackUrl(title) {
+  var player = ymFindVibePlayerBar();
+  if (!player || !title || ymNormalizeTrackName(ymGetVibeTrackTitle()) !== ymNormalizeTrackName(title)) return '';
+  var albumNode = player.querySelector('a[class*="AlbumCover_link"]');
+  var albumUrl = albumNode ? ymNormalizeMusicUrl(albumNode.getAttribute('href'), false) : '';
+  var album = albumUrl.match(/\\/album\\/(\\d+)$/);
+  if (!album) return '';
+  var nodes = [player].concat(Array.from(player.querySelectorAll('*')));
+  var queue = [];
   for (var i = 0; i < nodes.length; i++) {
-    var node = nodes[i];
-    for (var parent = 0; node && parent < 5; node = node.parentElement, parent++) {
-      var keys = Object.keys(node);
-      for (var k = 0; k < keys.length; k++) {
-        if (!/^__react(?:Props|Fiber)\\$/.test(keys[k])) continue;
-        var queue = [{ object: node[keys[k]], depth: 0 }];
-        var seen = new Set();
-        var budget = 0;
-        while (queue.length && budget++ < 750) {
-          var next = queue.shift();
-          var obj = next.object;
-          if (!obj || typeof obj !== 'object' || seen.has(obj)) continue;
-          seen.add(obj);
-          var name = obj.title || obj.trackTitle;
-          var album = obj.albumId || obj.album_id;
-          if (!album && Array.isArray(obj.albums) && obj.albums[0]) album = obj.albums[0].id;
-          if (!album && obj.album && typeof obj.album === 'object') album = obj.album.id;
-          var trackId = obj.trackId || obj.realId || obj.track_id;
-          if (!trackId && name && album) trackId = obj.id;
-          if (ymNormalizeTrackName(name) === expected && /^\\d+$/.test(String(trackId || ''))
-              && /^\\d+$/.test(String(album || ''))) {
-            var artists = Array.isArray(obj.artists) ? obj.artists.map(function(a) { return a.name || a.title || ''; }).join(', ') : '';
-            if (!expectedArtist || !artists || ymNormalizeTrackName(artists).indexOf(expectedArtist) !== -1
-                || expectedArtist.indexOf(ymNormalizeTrackName(artists)) !== -1) {
-              return ymNormalizeMusicUrl('/album/' + album + '/track/' + trackId, true);
-            }
-          }
-          if (next.depth >= 5) continue;
-          var own = Object.keys(obj);
-          for (var j = 0; j < own.length && j < 60; j++) {
-            var key = own[j];
-            if (key === 'children' || key === '_owner' || key === 'stateNode'
-                || key === 'alternate' || key === 'return' || key === 'child' || key === 'sibling') continue;
-            var value = obj[key];
-            if (value && typeof value === 'object') queue.push({ object: value, depth: next.depth + 1 });
-          }
-        }
-      }
+    var key = Object.keys(nodes[i]).find(function(key) { return key.indexOf('__reactProps$') === 0; });
+    if (key) queue.push({ object: nodes[i][key], depth: 0 });
+  }
+  var seen = new Set();
+  var ids = new Set();
+  var budget = 0;
+  while (queue.length && budget++ < 1500) {
+    var next = queue.shift();
+    var obj = next.object;
+    if (!obj || typeof obj !== 'object' || seen.has(obj)) continue;
+    seen.add(obj);
+    if (/^\\d+$/.test(String(obj.trackId || ''))) ids.add(String(obj.trackId));
+    if (ids.size > 1) return '';
+    if (next.depth >= 6) continue;
+    var keys = Object.keys(obj);
+    for (var j = 0; j < keys.length; j++) {
+      var name = keys[j];
+      if (name === '_owner' || name === 'ref') continue;
+      var value = obj[name];
+      if (value && typeof value === 'object') queue.push({ object: value, depth: next.depth + 1 });
     }
   }
-  return '';
+  if (queue.length || ids.size !== 1) return '';
+  return ymNormalizeMusicUrl('/album/' + album[1] + '/track/' + Array.from(ids)[0], true);
 }
 
 async function ymLookupCurrentTrackUrl() {
@@ -408,11 +390,9 @@ async function ymLookupCurrentTrackUrl() {
   if (!before.success || !before.title) return { success: false, reason: 'no-track' };
   var link = ymNormalizeMusicUrl(before.trackUrl, true);
   if (!link && ymIsVibePageActive()) {
-    link = ymGetVibeTrackUrlFromNodes() || ymFindVibeReactTrackUrl(before.title, before.artist);
+    link = ymGetVibeTrackUrlFromNodes() || ymFindVibeReactTrackUrl(before.title);
   }
   if (!link && ymIsVibePageActive()) {
-    // Read-only catalog search. It is run only when the user presses Copy Link.
-    // Never copy an arbitrary search result: title and artist must match.
     try {
       var query = (before.artist ? before.artist + ' ' : '') + before.title;
       var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -440,7 +420,6 @@ async function ymLookupCurrentTrackUrl() {
           var candidate = ymNormalizeMusicUrl('/album/' + albums[0].id + '/track/' + item.id, true);
           if (candidate && matches.indexOf(candidate) < 0) matches.push(candidate);
         }
-        // Multiple editions of the same song are ambiguous unless the cover identifies its album.
         if (matches.length === 1) link = matches[0];
         if (matches.length > 1) {
           var expectedAlbum = ymAlbumUrlFromCoverUrl(before.coverUrl);
@@ -524,7 +503,7 @@ function ymGetTrackInfo() {
         if (mediaVibe && mediaVibe.title !== title) mediaVibe = null;
         var artist = ymGetVibeTrackArtist() || (mediaVibe ? mediaVibe.artist : '');
         var originalCoverUrl = ymResolveVibeCoverUrl() || (mediaVibe ? mediaVibe.coverUrl : '');
-        var trackUrl = ymGetVibeTrackUrlFromNodes();
+        var trackUrl = ymGetVibeTrackUrlFromNodes() || ymFindVibeReactTrackUrl(title);
         return {
           success: true,
           title: title,
@@ -577,7 +556,6 @@ function ymGetTrackInfo() {
       };
     }
 
-    // Media Session is the current track even without Yandex's desktop player bar.
     var media = ymReadMediaSessionTrack();
     if (media) {
       return {

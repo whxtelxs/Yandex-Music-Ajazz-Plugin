@@ -77,7 +77,6 @@ function ymDetectSonataPlaybackIsPlaying() {
 function ymDetectPlaybackIsPlaying() {
   var detected = ymIsVibePageActive() ? ymDetectVibePlaybackIsPlaying() : ymDetectSonataPlaybackIsPlaying();
   if (detected !== null) return detected;
-  // My Vibe can display no playback controls. Chromium still exposes the status.
   try {
     var mediaSession = typeof navigator !== 'undefined' ? navigator.mediaSession : null;
     if (mediaSession && mediaSession.playbackState === 'playing') return true;

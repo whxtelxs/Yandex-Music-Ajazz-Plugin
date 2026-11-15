@@ -100,3 +100,21 @@ test('DOM actions expose the browser exception description', async () => {
     const controller = { ...runtime, client, connected: true, _clientGeneration: 1, getClient: async () => client, _domQueue: { enqueue: run => run(new AbortController().signal) } };
     await assert.rejects(controller._evaluateDom('return missing;'), /ReferenceError: control missing/);
 });
+
+
+test('Vibe reads the current track ID from nested React props without using recommendations', () => {
+    const { JSDOM } = require('jsdom');
+    const dom = new JSDOM('<section><a class="AlbumCover_link" href="/album?albumId=123"></a><div id="title"></div></section><div id="recommendation"></div>');
+    const player = dom.window.document.querySelector('section');
+    const title = dom.window.document.querySelector('#title');
+    title.__reactProps$test = { children: [{ props: { trackId: '456' } }] };
+    dom.window.document.querySelector('#recommendation').__reactProps$test = { trackId: '999' };
+    const sandbox = { URL, ymFindVibePlayerBar: () => player, ymGetVibeTrackTitle: () => 'Song' };
+    vm.createContext(sandbox);
+    vm.runInContext(require('../utils/yandex-music/dom/seek-track'), sandbox);
+    assert.equal(vm.runInContext("ymFindVibeReactTrackUrl('Song')", sandbox), 'https://music.yandex.ru/album/123/track/456');
+    assert.equal(vm.runInContext("ymFindVibeReactTrackUrl('Old song')", sandbox), '');
+    title.__reactProps$test.children.push({ props: { trackId: '789' } });
+    assert.equal(vm.runInContext("ymFindVibeReactTrackUrl('Song')", sandbox), '');
+    dom.window.close();
+});
