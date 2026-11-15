@@ -94,6 +94,7 @@ test('observer refresh after closing Vibe preserves confirmed off values', async
     Object.assign(f.sandbox, {
         MutationObserver: class { observe() {} disconnect() {} },
         ymGetTrackInfo: () => ({ success: true, title: 'Track', artist: 'Artist' }),
+        ymIsMusicPlayerReady: () => true,
         ymGetTrackTime: () => ({ success: false }),
         ymDetectPlaybackIsPlaying: () => true, ymDetectLikeIsLiked: () => false, ymDetectMuteIsMuted: () => false,
         setInterval: () => 1, clearInterval() {},

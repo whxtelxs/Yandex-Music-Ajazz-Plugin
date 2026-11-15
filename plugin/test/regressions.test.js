@@ -267,6 +267,7 @@ test('the observer collects Sonata metadata and disposes every observer and time
     const sandbox = {
         window: {}, document: { body: {} }, MutationObserver,
         ymGetTrackInfo: () => ({ success: true, title: 'Sonata', artist: 'A', coverUrl: 'cover', trackUrl: 'track' }),
+        ymIsMusicPlayerReady: () => true,
         ymGetTrackTime: () => ({ success: true, currentTime: '0:30', totalTime: '3:00' }),
         ymIsVibePageActive: () => false, ymFindVibeContextMenuPanel: () => null, ymFindSonataPlayerBar: () => root,
         ymDetectSonataControlByFragment: fragment => fragment === 'shuffle' ? { ok: true, shuffle: true } : { ok: true, mode: 2 },
