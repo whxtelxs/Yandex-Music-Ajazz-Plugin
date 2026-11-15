@@ -3,6 +3,16 @@
 const { log } = require('../../../lib/logger');
 
 module.exports = {
+  async lookupCurrentTrackLink() {
+    try {
+      return await this._evaluateDom('return await ymLookupCurrentTrackUrl();', {
+        priority: 'user', key: 'copy-track-link-lookup', timeoutMs: 7000
+      });
+    } catch (err) {
+      log.debug?.('Поиск ссылки на трек:', err.message);
+      return null;
+    }
+  },
   async getTrackInfo(options = {}) {
     try {
       const quiet = !!options.quiet || this.isWarmingUp?.();
@@ -43,6 +53,10 @@ module.exports = {
       if (this.isWarmingUp?.()) {
         return null;
       }
+      if (value?.transient) {
+        log.debug?.('Данные о треке ещё недоступны:', value.message);
+        return null;
+      }
       log.error('Не удалось получить информацию о треке:', value?.message);
       return null;
     } catch (err) {
@@ -74,6 +88,10 @@ module.exports = {
         };
       }
       if (this.isWarmingUp?.()) {
+        return null;
+      }
+      if (value?.transient) {
+        log.debug?.('Данные о времени трека ещё недоступны:', value.message);
         return null;
       }
       log.error('Не удалось получить информацию о времени трека:', value?.message);

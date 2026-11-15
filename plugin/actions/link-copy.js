@@ -24,6 +24,9 @@ module.exports = function registerLinkCopyAction(plugin, { copy = writeClipboard
             try {
                 const link = await getCurrentTrackLink(deps.yandexMusic);
                 await copy(link);
+                if (!/\/track\/\d+(?:[/?#]|$)/.test(link)) {
+                    log.info('Ссылка на трек недоступна. Скопирована ссылка на альбом:', link);
+                }
             } catch (error) {
                 log.error('Копирование ссылки на трек:', error.message);
                 if (data && this.data[context] === data) {

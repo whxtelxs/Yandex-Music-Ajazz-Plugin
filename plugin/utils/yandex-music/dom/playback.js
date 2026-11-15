@@ -75,12 +75,17 @@ function ymDetectSonataPlaybackIsPlaying() {
 }
 
 function ymDetectPlaybackIsPlaying() {
-  if (ymIsVibePageActive()) {
-    var vibeState = ymDetectVibePlaybackIsPlaying();
-    return vibeState;
-  }
-
-  return ymDetectSonataPlaybackIsPlaying();
+  var detected = ymIsVibePageActive() ? ymDetectVibePlaybackIsPlaying() : ymDetectSonataPlaybackIsPlaying();
+  if (detected !== null) return detected;
+  // My Vibe can display no playback controls. Chromium still exposes the status.
+  try {
+    var mediaSession = typeof navigator !== 'undefined' ? navigator.mediaSession : null;
+    if (mediaSession && mediaSession.playbackState === 'playing') return true;
+    if (mediaSession && mediaSession.playbackState === 'paused') return false;
+    var audio = ymQueryDeep('audio') || ymQueryDeep('video');
+    if (audio) return !audio.paused && !audio.ended;
+  } catch (ignored) {}
+  return null;
 }
 
 async function ymTogglePlayback() {

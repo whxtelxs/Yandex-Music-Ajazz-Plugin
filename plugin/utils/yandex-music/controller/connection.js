@@ -113,7 +113,7 @@ module.exports = {
 
     async checkConnection() {
         try {
-            const value = await this._evaluateDom('return !!(ymFindSonataPlayerBar() || ymFindVibePlayerBar());',
+            const value = await this._evaluateDom('return ymIsMusicPlayerReady();',
                 { priority: 'sync', key: 'check-connection' });
             this.playerReady = value === true;
             return this.connected && this.playerReady;

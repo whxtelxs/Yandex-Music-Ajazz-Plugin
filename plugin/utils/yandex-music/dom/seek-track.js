@@ -3,8 +3,8 @@
 module.exports = `
 function ymFindSeekSlider() {
   if (ymIsVibePageActive()) {
-    var vibeSlider = document.querySelector('input[aria-label="Управление таймкодом"]')
-      || document.querySelector('[class*="VibePlayerbarMeta_slider"]');
+    var vibeSlider = ymQueryDeep('input[aria-label="Управление таймкодом"]')
+      || ymQueryDeep('[class*="VibePlayerbarMeta_slider"]');
     if (vibeSlider) return vibeSlider;
   }
   return document.querySelector('[data-test-id="TIMECODE_SLIDER"]');
@@ -17,10 +17,73 @@ function ymParseTimecodeOverlay(text) {
   return { currentTime: parts[0], totalTime: parts[1] };
 }
 
+function ymReadAudioTime() {
+  try {
+    var audioElements = document.querySelectorAll('audio');
+    var audio = null;
+    for (var i = 0; i < audioElements.length; i++) {
+      var item = audioElements[i];
+      if (!item.paused && !item.ended && Number.isFinite(item.duration) && item.duration > 0) {
+        audio = item;
+        break;
+      }
+      if (!audio && Number.isFinite(item.duration) && item.duration > 0) audio = item;
+    }
+    if (!audio) audio = ymQueryDeep('audio') || ymQueryDeep('video');
+    if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) return null;
+    var duration = audio.duration;
+    var position = Number.isFinite(audio.currentTime) ? Math.max(0, Math.min(duration, audio.currentTime)) : 0;
+    function format(seconds) {
+      var total = Math.floor(seconds);
+      return Math.floor(total / 60) + ':' + String(total % 60).padStart(2, '0');
+    }
+    return {
+      success: true,
+      currentTime: format(position), totalTime: format(duration),
+      progressValue: position, progressMax: duration,
+      progressPercent: position / duration * 100
+    };
+  } catch (err) { return null; }
+}
+
+
+function ymReadVisibleTrackTime() {
+  try {
+    var current = ymQueryDeep('[data-test-id="TIMECODE_TIME_START"]')
+      || ymQueryDeep('[class*="Timecode_timeStart"]')
+      || ymQueryDeep('[class*="Timecode_currentTime"]');
+    var total = ymQueryDeep('[data-test-id="TIMECODE_TIME_END"]')
+      || ymQueryDeep('[class*="Timecode_timeEnd"]')
+      || ymQueryDeep('[class*="Timecode_totalTime"]');
+    var slider = ymFindSeekSlider();
+    var rawCurrent = current ? String(current.textContent || '').trim() : '';
+    var rawTotal = total ? String(total.textContent || '').trim() : '';
+    if (!rawCurrent || !rawTotal) return null;
+    var parse = function(str) {
+      if (!/^\\d{1,3}:\\d{2}(?::\\d{2})?$/.test(str)) return null;
+      return str.split(':').reduce(function(acc, part) { return 60 * acc + Number(part); }, 0);
+    };
+    var time = parse(rawCurrent);
+    var duration = parse(rawTotal);
+    if (time === null || duration === null || duration <= 0) return null;
+    var value = slider ? Number(slider.value) : NaN;
+    var max = slider ? Number(slider.max) : NaN;
+    if (!Number.isFinite(value) || !Number.isFinite(max) || max <= 0) {
+      value = time;
+      max = duration;
+    }
+    return {
+      success: true, currentTime: rawCurrent, totalTime: rawTotal,
+      progressValue: value, progressMax: max,
+      progressPercent: value / max * 100
+    };
+  } catch (ignored) { return null; }
+}
+
 function ymGetTrackTime() {
   try {
     if (ymIsVibePageActive()) {
-      var timeOverlay = document.querySelector('[class*="VibePlayerbarMeta_timecodeOverlay"]');
+      var timeOverlay = ymQueryDeep('[class*="VibePlayerbarMeta_timecodeOverlay"]');
       var slider = ymFindSeekSlider();
       if (timeOverlay) {
         var parsed = ymParseTimecodeOverlay(timeOverlay.textContent);
@@ -39,8 +102,19 @@ function ymGetTrackTime() {
       }
     }
 
+    var visibleTime = ymReadVisibleTrackTime();
+    if (visibleTime) return visibleTime;
+    var audioTime = ymReadAudioTime();
+    if (audioTime) return audioTime;
+    var mediaTime = ymReadMediaPosition();
+    if (mediaTime) return mediaTime;
+
     var playerBar = ymFindSonataPlayerBar();
-    if (!playerBar) return { success: false, message: 'Не найдена нижняя панель плеера' };
+    if (!playerBar) return {
+      success: false,
+      message: 'Данные о времени пока недоступны',
+      transient: ymIsVibePageActive()
+    };
 
     var currentTimeElement = playerBar.querySelector('[data-test-id="TIMECODE_TIME_START"]');
     var totalTimeElement = playerBar.querySelector('[data-test-id="TIMECODE_TIME_END"]');
@@ -59,7 +133,7 @@ function ymGetTrackTime() {
       };
     }
 
-    return { success: false, message: 'Не удалось найти элементы времени трека' };
+    return ymReadAudioTime() || { success: false, message: 'Не удалось найти элементы времени трека' };
   } catch (err) {
     return { success: false, message: err.message, error: err.toString() };
   }
@@ -144,7 +218,7 @@ function ymExtractCoverUrlFromNode(node) {
       if (img.currentSrc) return img.currentSrc;
       if (img.src) return img.src;
       var srcset = img.getAttribute('srcset') || '';
-      if (srcset) return srcset.split(',')[0].trim().split(/\s+/)[0];
+      if (srcset) return srcset.split(',')[0].trim().split(/\\s+/)[0];
     }
   }
   var style = node.style && node.style.backgroundImage;
@@ -165,7 +239,10 @@ function ymFindVibeCoverImage() {
     ymQueryDeep('[class*="VibePlayerBar_root"] a[class*="AlbumCover_link"]'),
     ymQueryDeep('[class*="VibePlayerBar_root"] [class*="AlbumCover_cover"]'),
     ymQueryDeep('[class*="VibePlayerBar_root"] [class*="AlbumCover_root"]'),
-    ymQueryDeep('[class*="VibePlayerBar_root"] img')
+    ymQueryDeep('[class*="VibePlayerBar_root"] img'),
+    ymQueryDeep('[class*="VibePage_root"] [class*="AlbumCover_cover"]'),
+    ymQueryDeep('[class*="VibePage_root"] img[class*="AlbumCover"]'),
+    ymQueryDeep('[class*="VibePlayerbarMeta_root"] img')
   ];
   for (var i = 0; i < candidates.length; i++) {
     if (candidates[i]) return candidates[i];
@@ -178,13 +255,17 @@ function ymResolveVibeCoverUrl() {
     ymQueryDeep('[class*="VibePlayerBar_root"] a[class*="AlbumCover_link"]'),
     ymQueryDeep('[class*="VibePlayerBar_root"] [class*="AlbumCover_cover"]'),
     ymQueryDeep('[class*="VibePlayerBar_root"] [class*="AlbumCover_root"]'),
-    ymQueryDeep('[class*="VibePlayerBar_root"] img')
+    ymQueryDeep('[class*="VibePlayerBar_root"] img'),
+    ymQueryDeep('[class*="VibePage_root"] [class*="AlbumCover_cover"]'),
+    ymQueryDeep('[class*="VibePage_root"] img[class*="AlbumCover"]'),
+    ymQueryDeep('[class*="VibePlayerbarMeta_root"] img')
   ];
   for (var i = 0; i < candidates.length; i++) {
     var url = ymExtractCoverUrlFromNode(candidates[i]);
     if (url) return url;
   }
-  return '';
+  var media = ymReadMediaSessionTrack();
+  return media ? media.coverUrl : '';
 }
 
 function ymFindVibeAlbumUrl(coverUrl) {
@@ -239,6 +320,142 @@ function ymFindMusicUrlDeep(requireTrack) {
     }
   }
   return best;
+}
+
+
+function ymNormalizeTrackName(text) {
+  return String(text || '').trim().toLocaleLowerCase().replace(/\\s+/g, ' ');
+}
+
+function ymGetVibeTrackUrlFromNodes() {
+  var meta = ymQueryDeep('[class*="VibePage_entityMeta"], [class*="VibePlayerbarMeta_root"]')
+    || ymFindVibeMetadataRoot();
+  if (!meta) return '';
+  var title = ymNormalizeTrackName(ymGetVibeTrackTitle());
+  if (!title) return '';
+  var links = ymCollectDeepLinks(meta);
+  var matching = [];
+  for (var i = 0; i < links.length; i++) {
+    // Do not copy a link to an unrelated recommendation on the Vibe page.
+    var url = ymNormalizeMusicUrl(links[i].getAttribute('href') || links[i].href || '', true);
+    if (!url) continue;
+    var label = ymNormalizeTrackName(links[i].getAttribute('aria-label') || links[i].textContent);
+    if (label === title || label.indexOf(title + ' ') === 0) return url;
+    matching.push(url);
+  }
+  // A single link inside the track metadata (not the entire page) is unambiguous.
+  var className = String(meta.className || '');
+  if (matching.length === 1 && (/VibePage_entityMeta|VibePlayerbarMeta_root/.test(className))) {
+    return matching[0];
+  }
+  return '';
+}
+
+function ymFindVibeReactTrackUrl(title, artist) {
+  var root = ymFindVibeMetadataRoot();
+  if (!root || !title) return '';
+  var nodes = [root];
+  var titleNode = ymQueryDeep('[class*="VibePage_trackNameText"], [class*="VibePlayerbarMeta_trackNameText"]', root);
+  if (titleNode) nodes.unshift(titleNode);
+  var expected = ymNormalizeTrackName(title);
+  var expectedArtist = ymNormalizeTrackName(artist);
+  for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i];
+    for (var parent = 0; node && parent < 5; node = node.parentElement, parent++) {
+      var keys = Object.keys(node);
+      for (var k = 0; k < keys.length; k++) {
+        if (!/^__react(?:Props|Fiber)\\$/.test(keys[k])) continue;
+        var queue = [{ object: node[keys[k]], depth: 0 }];
+        var seen = new Set();
+        var budget = 0;
+        while (queue.length && budget++ < 750) {
+          var next = queue.shift();
+          var obj = next.object;
+          if (!obj || typeof obj !== 'object' || seen.has(obj)) continue;
+          seen.add(obj);
+          var name = obj.title || obj.trackTitle;
+          var album = obj.albumId || obj.album_id;
+          if (!album && Array.isArray(obj.albums) && obj.albums[0]) album = obj.albums[0].id;
+          if (!album && obj.album && typeof obj.album === 'object') album = obj.album.id;
+          var trackId = obj.trackId || obj.realId || obj.track_id;
+          if (!trackId && name && album) trackId = obj.id;
+          if (ymNormalizeTrackName(name) === expected && /^\\d+$/.test(String(trackId || ''))
+              && /^\\d+$/.test(String(album || ''))) {
+            var artists = Array.isArray(obj.artists) ? obj.artists.map(function(a) { return a.name || a.title || ''; }).join(', ') : '';
+            if (!expectedArtist || !artists || ymNormalizeTrackName(artists).indexOf(expectedArtist) !== -1
+                || expectedArtist.indexOf(ymNormalizeTrackName(artists)) !== -1) {
+              return ymNormalizeMusicUrl('/album/' + album + '/track/' + trackId, true);
+            }
+          }
+          if (next.depth >= 5) continue;
+          var own = Object.keys(obj);
+          for (var j = 0; j < own.length && j < 60; j++) {
+            var key = own[j];
+            if (key === 'children' || key === '_owner' || key === 'stateNode'
+                || key === 'alternate' || key === 'return' || key === 'child' || key === 'sibling') continue;
+            var value = obj[key];
+            if (value && typeof value === 'object') queue.push({ object: value, depth: next.depth + 1 });
+          }
+        }
+      }
+    }
+  }
+  return '';
+}
+
+async function ymLookupCurrentTrackUrl() {
+  var before = ymGetTrackInfo();
+  if (!before.success || !before.title) return { success: false, reason: 'no-track' };
+  var link = ymNormalizeMusicUrl(before.trackUrl, true);
+  if (!link && ymIsVibePageActive()) {
+    link = ymGetVibeTrackUrlFromNodes() || ymFindVibeReactTrackUrl(before.title, before.artist);
+  }
+  if (!link && ymIsVibePageActive()) {
+    // Read-only catalog search. It is run only when the user presses Copy Link.
+    // Never copy an arbitrary search result: title and artist must match.
+    try {
+      var query = (before.artist ? before.artist + ' ' : '') + before.title;
+      var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var stop = controller ? setTimeout(function() { controller.abort(); }, 2200) : null;
+      var response;
+      try {
+        response = await fetch('https://api.music.yandex.net/search?type=track&page=0&text='
+          + encodeURIComponent(query), controller ? { signal: controller.signal } : {});
+      } finally { if (stop) clearTimeout(stop); }
+      if (response && response.ok) {
+        var result = await response.json();
+        var catalog = result.result || result;
+        var section = catalog && catalog.tracks;
+        var tracks = section && (section.results || section.items) || [];
+        var matches = [];
+        for (var n = 0; n < tracks.length && n < 20; n++) {
+          var item = tracks[n];
+          if (!item || ymNormalizeTrackName(item.title) !== ymNormalizeTrackName(before.title)) continue;
+          var art = Array.isArray(item.artists) ? item.artists.map(function(a) { return a.name || ''; }) : [];
+          var wanted = ymNormalizeTrackName(before.artist);
+          if (wanted && !art.some(function(a) { return wanted.indexOf(ymNormalizeTrackName(a)) !== -1
+              || ymNormalizeTrackName(a).indexOf(wanted) !== -1; })) continue;
+          var albums = Array.isArray(item.albums) ? item.albums : [];
+          if (!albums.length || !/^\\d+$/.test(String(item.id || '')) || !/^\\d+$/.test(String(albums[0].id || ''))) continue;
+          var candidate = ymNormalizeMusicUrl('/album/' + albums[0].id + '/track/' + item.id, true);
+          if (candidate && matches.indexOf(candidate) < 0) matches.push(candidate);
+        }
+        // Multiple editions of the same song are ambiguous unless the cover identifies its album.
+        if (matches.length === 1) link = matches[0];
+        if (matches.length > 1) {
+          var expectedAlbum = ymAlbumUrlFromCoverUrl(before.coverUrl);
+          var albumId = String(expectedAlbum).match(/\\/album\\/(\\d+)$/);
+          if (albumId) link = matches.find(function(url) { return url.indexOf('/album/' + albumId[1] + '/track/') !== -1; }) || '';
+        }
+      }
+    } catch (ignored) {}
+  }
+  var after = ymGetTrackInfo();
+  if (!after.success || ymNormalizeTrackName(after.title) !== ymNormalizeTrackName(before.title)
+      || ymNormalizeTrackName(after.artist) !== ymNormalizeTrackName(before.artist)) {
+    return { success: false, reason: 'track-changed' };
+  }
+  return { success: !!link, trackUrl: link || '', title: before.title, artist: before.artist };
 }
 
 function ymFindSonataTrackUrl(playerBar) {
@@ -303,9 +520,11 @@ function ymGetTrackInfo() {
     if (ymIsVibePageActive()) {
       var title = ymGetVibeTrackTitle();
       if (title) {
-        var artist = ymGetVibeTrackArtist();
-        var originalCoverUrl = ymResolveVibeCoverUrl();
-        var trackUrl = ymFindVibeAlbumUrl(originalCoverUrl);
+        var mediaVibe = ymReadMediaSessionTrack();
+        if (mediaVibe && mediaVibe.title !== title) mediaVibe = null;
+        var artist = ymGetVibeTrackArtist() || (mediaVibe ? mediaVibe.artist : '');
+        var originalCoverUrl = ymResolveVibeCoverUrl() || (mediaVibe ? mediaVibe.coverUrl : '');
+        var trackUrl = ymGetVibeTrackUrlFromNodes();
         return {
           success: true,
           title: title,
@@ -358,7 +577,21 @@ function ymGetTrackInfo() {
       };
     }
 
-    if (!playerBar) return { success: false, message: 'Не найдена нижняя панель плеера' };
+    // Media Session is the current track even without Yandex's desktop player bar.
+    var media = ymReadMediaSessionTrack();
+    if (media) {
+      return {
+        success: true,
+        title: media.title, artist: media.artist,
+        coverUrl: ymUpscaleCoverUrl(media.coverUrl),
+        originalCoverUrl: media.coverUrl,
+        trackUrl: ''
+      };
+    }
+    if (!playerBar) return {
+      success: false, message: 'Метаданные трека пока недоступны',
+      transient: ymIsVibePageActive()
+    };
     return { success: false, message: 'Не удалось найти информацию о треке' };
   } catch (err) {
     return { success: false, message: err.message, error: err.toString() };
